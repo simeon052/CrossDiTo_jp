@@ -19,6 +19,15 @@
 // Reader enforcement: SdCardFont::load().
 #define CPFONT_VERSION 4
 
+// 読み込みを許容する最大バージョン。日本語フォント（crosspoint-jp が配布して
+// いるもの）は v5 で、v4 との差は「スタイルTOCの offset 28 — v4 では予約領域
+// だった 4 バイト — に縦書き用 vert セクションの位置が入り、ファイル末尾に
+// その vert セクションが付く」ことだけ。グローバルヘッダ32バイトとTOCエントリ
+// 32バイトという寸法は v4 と同じで、v4 の読み方をした場合も他のオフセットは
+// すべて一致する（未使用の vert セクションを読まないだけ）。
+// CPFONT_VERSION の方は URL に埋める配信バージョンなので 4 のまま据え置く。
+#define CPFONT_VERSION_MAX_SUPPORTED 5
+
 class SdCardFont {
  public:
   static constexpr uint16_t MAX_PAGE_GLYPHS = 512;

@@ -544,8 +544,9 @@ bool SdCardFont::load(const char* path) {
   }
 
   uint16_t fileVersion = readU16(headerBuf + 8);
-  if (fileVersion != CPFONT_VERSION) {
-    LOG_ERR("SDCF", "Unsupported version: %u (expected %u)", fileVersion, CPFONT_VERSION);
+  if (fileVersion < CPFONT_VERSION || fileVersion > CPFONT_VERSION_MAX_SUPPORTED) {
+    LOG_ERR("SDCF", "Unsupported version: %u (expected %u-%u)", fileVersion, CPFONT_VERSION,
+            CPFONT_VERSION_MAX_SUPPORTED);
     return false;
   }
 
@@ -720,7 +721,8 @@ bool SdCardFont::load(const char* path) {
 
   loaded_ = true;
 
-  LOG_DBG("SDCF", "Loaded: %s (v%u, %u styles)", path, CPFONT_VERSION, styleCount_);
+  // v4 と v5 の両方を受け付けるので、定数ではなく実際に読んだ版を出す。
+  LOG_DBG("SDCF", "Loaded: %s (v%u, %u styles)", path, fileVersion, styleCount_);
   for (uint8_t i = 0; i < MAX_STYLES; i++) {
     if (!styles_[i].present) continue;
     const auto& h = styles_[i].header;

@@ -44,6 +44,25 @@ https://github.com/zrn-ns/crosspoint-jp/releases/download/sd-fonts/fonts.json
 > **注意:** 現状は他プロジェクトのリリース資産に依存している。安定運用するなら
 > このフォークのリリースへフォントをミラーして、URL を差し替えること。
 
+### .cpfont v5 の受け入れ
+
+配布されている日本語フォントは **v5** で、CrossDiTo の読み込みは v4 固定だった
+ため、そのままではマニフェストを差し替えても `Unsupported version: 5` で弾かれる。
+`SdCardFont::load()` が v4–v5 を受け付けるようにした。
+
+v5 と v4 の差は次の1点だけで、v4 の読み方をしても他のオフセットはすべて一致する。
+
+- スタイルTOCの offset 28（v4 では予約領域だった4バイト）に、縦書き用の
+  vert セクションの位置が入る
+- ファイル末尾にその vert セクションが付く
+- グローバルヘッダ32バイト / TOCエントリ32バイトという寸法は v4 と同じ
+
+`CPFONT_VERSION` は配信URLに埋め込む版番号なので 4 のまま据え置き、受け入れ上限を
+`CPFONT_VERSION_MAX_SUPPORTED` として別に持たせている。
+
+vert セクション（OpenTypeの縦書き代替字形）は Stage 2 で使う。v4 の読み方では
+無視されるだけなので、Stage 1 の時点では実害も利得もない。
+
 ### 日本語が表示される仕組み（既存機能）
 
 CrossDiTo（＝CrossPoint 1.5 系）には既に CJK まわりの土台がある。Stage 1 で
