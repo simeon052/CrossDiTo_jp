@@ -68,6 +68,26 @@ class SdCardFont {
   int buildAdvanceTableForCodepoints(const uint32_t* codepoints, uint32_t cpCount, bool includeSpace,
                                      bool includeHyphen, uint8_t styleMask = 0x0F);
 
+  // --- 縦書き用の代替字形（.cpfont v5 の vert セクション） -------------------
+  // OpenType の 'vert' feature 由来の字形。、。「」ー などを縦組みの正しい位置
+  // （句読点は右上、鉤括弧はセルの上/下、長音は中央）に置くために使う。
+  // v4 のフォントや vert セクションを持たないフォントでは何も返らないので、
+  // 呼び出し側は横組みの字形へフォールバックすること。
+
+  // このフォントがどれかのスタイルに vert データを持つか。
+  bool hasVertData() const;
+
+  // 指定スタイルの vert データを SD から読む。縦書きで描く前に一度呼ぶ。
+  // 読み込み済みなら何もせず true を返す。
+  bool loadVertData(uint8_t style);
+
+  // codepoint に対応する vert 字形を返す（無ければ nullptr）。
+  // 事前に loadVertData() が必要。
+  const EpdGlyph* getVertGlyph(uint32_t codepoint, uint8_t style = 0) const;
+
+  // getVertGlyph() が返した字形のビットマップ。
+  const uint8_t* getVertBitmap(const EpdGlyph* vertGlyph, uint8_t style = 0) const;
+
   // Look up advanceX for a codepoint from the advance table.
   // Returns the 12.4 fixed-point advance, or 0 if not found.
   uint16_t getAdvance(uint32_t codepoint, uint8_t style) const;
@@ -161,6 +181,15 @@ class SdCardFont {
     uint32_t kernMatrixFileOffset = 0;
     uint32_t ligatureFileOffset = 0;
     uint32_t bitmapFileOffset = 0;
+
+    // 縦書き用 vert セクション（.cpfont v5 のみ。v4 では 0 のまま）。
+    // 縦書きで実際に描くまで読まない遅延ロードで、横書きだけなら常にゼロ負担。
+    uint32_t vertSectionOffset = 0;
+    uint16_t vertCount = 0;
+    bool vertLoaded = false;
+    uint32_t* vertCodepoints = nullptr;  // 昇順。二分探索する
+    EpdGlyph* vertGlyphs = nullptr;      // vertCodepoints と同じ並び
+    uint8_t* vertBitmap = nullptr;       // 全 vert 字形のビットマップを連結したもの
 
     // Full intervals loaded from file (kept in RAM for codepoint lookup)
     EpdUnicodeInterval* fullIntervals = nullptr;

@@ -12,6 +12,7 @@
 #include <algorithm>
 
 #include "FontCacheManager.h"
+#include "VerticalTextUtils.h"
 
 namespace {
 
@@ -3099,6 +3100,191 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
 
     renderCharImpl<TextRotation::Rotated90CW>(*this, renderMode, font, cp, x, lastBaseY, black, style);
     prevCp = cp;
+  }
+}
+
+// --- 縦書き ---------------------------------------------------------------
+//
+// 1文字ぶんのセルを上から下へ積む。セルの送り量は「その字の advance（全角なら
+// em）＋ 字間」で、ラテン文字のように半角幅の字が続く場合はまとめて 90°回して
+// 1つの塊として送る（縦組みの中の欧文は寝かせて読ませるのが通例）。
+//
+// 句読点・括弧・長音は、SDフォントが .cpfont v5 の vert 字形を持っていれば
+// それを使う。vert 字形はフォント側が縦組み用の位置（。、は右上、「はセル下部、
+// 」はセル上部、ーは中央）で設計されているので、こちらで位置を補正しない。
+// vert 字形が無いフォントでは横組みの字形をそのまま正立で描くため、句読点が
+// セルの左下に寄って見える。これは既知の劣化で、日本語フォントを入れれば解消する。
+
+namespace {
+
+// vert 代替字形の blit。renderCharImpl の TextRotation::None と同じ描き方だが、
+// フォントの字形表ではなく明示的に渡された字形とビットマップを使う。
+void blitVertGlyph(const GfxRenderer& renderer, const GfxRenderer::RenderMode renderMode, const EpdGlyph& glyph,
+                   const uint8_t* bitmap, const bool is2Bit, const int cursorX, const int baselineY,
+                   const bool pixelState) {
+  if (!bitmap || glyph.width == 0 || glyph.height == 0) return;
+
+  const int innerBase = cursorX + glyph.left;   // screenX = innerBase + glyphX
+  const int outerBase = baselineY - glyph.top;  // screenY = outerBase + glyphY
+
+  if (!renderer.glyphIntersectsStrip(innerBase, outerBase, innerBase + glyph.width - 1, outerBase + glyph.height - 1)) {
+    return;
+  }
+
+  int pixelPosition = 0;
+  for (int glyphY = 0; glyphY < glyph.height; glyphY++) {
+    const int screenY = outerBase + glyphY;
+    for (int glyphX = 0; glyphX < glyph.width; glyphX++, pixelPosition++) {
+      const int screenX = innerBase + glyphX;
+      uint8_t bmpVal;
+      if (is2Bit) {
+        const uint8_t byte = bitmap[pixelPosition >> 2];
+        const uint8_t bitIndex = (3 - (pixelPosition & 3)) * 2;
+        bmpVal = 3 - ((byte >> bitIndex) & 0x3);
+      } else {
+        const uint8_t byte = bitmap[pixelPosition >> 3];
+        const uint8_t bitIndex = 7 - (pixelPosition & 7);
+        bmpVal = ((byte >> bitIndex) & 0x1) ? 0 : 3;
+      }
+
+      if (renderMode == GfxRenderer::BW && bmpVal < 3) {
+        renderer.drawPixel(screenX, screenY, pixelState);
+      } else if (renderMode == GfxRenderer::GRAYSCALE_MSB && (bmpVal == 1 || bmpVal == 2)) {
+        renderer.drawPixel(screenX, screenY, false);
+      } else if (renderMode == GfxRenderer::GRAYSCALE_LSB && bmpVal == 1) {
+        renderer.drawPixel(screenX, screenY, false);
+      }
+    }
+  }
+}
+
+}  // namespace
+
+int GfxRenderer::verticalCellAdvance(const int advancePx) const {
+  return advancePx + advancePx * verticalCharSpacingPercent_ / 100;
+}
+
+// 注意（Stage 2c で要対応）: ここは字形表（getGlyph）から advance を取るので、
+// SDフォントでは対象の字がプリウォーム済みである必要がある。横組みの測定は
+// SdCardFont の advance テーブル経由で字形無しでも測れる経路を持っているので、
+// 段組みレイアウトから使う際は同じ経路に合わせること。
+int GfxRenderer::getTextAdvanceVertical(const int fontId, const char* text, const EpdFontFamily::Style style) const {
+  if (text == nullptr || *text == '\0') return 0;
+
+  const int resolvedFontId = resolveTextFontId(fontId, text, style);
+  const auto fontIt = fontMap.find(resolvedFontId);
+  if (fontIt == fontMap.end()) return 0;
+  const auto& font = fontIt->second;
+
+  int total = 0;
+  const char* p = text;
+  const char* sidewaysStart = nullptr;
+  uint32_t cp;
+  while (true) {
+    const char* charStart = p;
+    cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&p));
+    const bool end = (cp == 0);
+    const bool upright = !end && VerticalTextUtils::isUprightInVertical(cp);
+
+    if (!end && !upright) {
+      if (!sidewaysStart) sidewaysStart = charStart;
+      continue;
+    }
+    // 寝かせる区間が閉じた: 横組みの幅がそのまま縦の送りになる
+    if (sidewaysStart) {
+      const std::string run(sidewaysStart, static_cast<size_t>(charStart - sidewaysStart));
+      total += getTextAdvanceX(resolvedFontId, run.c_str(), style);
+      sidewaysStart = nullptr;
+    }
+    if (end) break;
+
+    const EpdGlyph* glyph = font.getGlyph(cp, style);
+    if (!glyph) continue;
+    total += verticalCellAdvance(fp4::toPixel(static_cast<int32_t>(glyph->advanceX)));
+  }
+  return total;
+}
+
+void GfxRenderer::drawTextVertical(const int fontId, const int x, const int y, const char* text, const bool black,
+                                   const EpdFontFamily::Style style) const {
+  if (text == nullptr || *text == '\0') return;
+
+  // プリウォーム走査中は描かずに記録だけする（drawText と同じ扱い）。
+  if (fontCacheManager_ && fontCacheManager_->isScanning()) {
+    fontCacheManager_->recordText(text, fontId, style);
+    return;
+  }
+
+  const int resolvedFontId = resolveTextFontId(fontId, text, style);
+  const auto fontIt = fontMap.find(resolvedFontId);
+  if (fontIt == fontMap.end()) {
+    LOG_ERR("GFX", "drawTextVertical: font %d not found", resolvedFontId);
+    return;
+  }
+  const auto& font = fontIt->second;
+  const EpdFontData* fontData = font.getData(style);
+  if (!fontData) return;
+  const int ascender = fontData->ascender;
+
+  // vert 字形を持つSDフォントなら、この場で読み込む（読み込み済みなら何もしない）。
+  SdCardFont* sdFont = nullptr;
+  const auto sdIt = sdCardFonts_.find(resolvedFontId);
+  if (sdIt != sdCardFonts_.end() && sdIt->second && sdIt->second->hasVertData()) {
+    sdFont = sdIt->second;
+    sdFont->loadVertData(static_cast<uint8_t>(style));
+  }
+
+  int yPos = y;
+  const char* p = text;
+  const char* sidewaysStart = nullptr;
+  while (true) {
+    const char* charStart = p;
+    const uint32_t cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&p));
+    const bool end = (cp == 0);
+    const bool upright = !end && VerticalTextUtils::isUprightInVertical(cp);
+
+    if (!end && !upright) {
+      if (!sidewaysStart) sidewaysStart = charStart;
+      continue;
+    }
+
+    if (sidewaysStart) {
+      // 欧文は 90° 回して縦に流す。drawTextRotated90CW は上へ進むので、
+      // 区間の長さぶん下から描き始めて結果的に上から下へ並ぶようにする。
+      const std::string run(sidewaysStart, static_cast<size_t>(charStart - sidewaysStart));
+      const int runWidth = getTextAdvanceX(resolvedFontId, run.c_str(), style);
+      drawTextRotated90CW(resolvedFontId, x, yPos + runWidth, run.c_str(), black, style);
+      yPos += runWidth;
+      sidewaysStart = nullptr;
+    }
+    if (end) break;
+
+    const EpdGlyph* glyph = font.getGlyph(cp, style);
+    if (!glyph) continue;
+    const int advance = fp4::toPixel(static_cast<int32_t>(glyph->advanceX));
+
+    const EpdGlyph* vertGlyph = nullptr;
+    const uint8_t* vertBitmap = nullptr;
+    if (sdFont && VerticalTextUtils::shouldUseVertGlyph(cp)) {
+      vertGlyph = sdFont->getVertGlyph(cp, static_cast<uint8_t>(style));
+      if (vertGlyph) vertBitmap = sdFont->getVertBitmap(vertGlyph, static_cast<uint8_t>(style));
+    }
+
+    if (vertGlyph && vertBitmap) {
+      blitVertGlyph(*this, renderMode, *vertGlyph, vertBitmap, fontData->is2Bit, x, yPos + ascender, black);
+    } else {
+      // 小書き仮名は横組み用に「セルの下寄り中央」で設計されている。縦組みでは
+      // 右上に寄せるのが正しいので、実測した vert 変位ぶんだけ動かして描く。
+      int dx = 0;
+      int dy = 0;
+      if (VerticalTextUtils::isSmallKana(cp)) {
+        dx = advance * VerticalTextUtils::SMALL_KANA_DX_PERCENT / 100;
+        dy = advance * VerticalTextUtils::SMALL_KANA_DY_PERCENT / 100;
+      }
+      renderCharImpl<TextRotation::None>(*this, renderMode, font, cp, x + dx, yPos + ascender - dy, black, style);
+    }
+
+    yPos += verticalCellAdvance(advance);
   }
 }
 
