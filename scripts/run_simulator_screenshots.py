@@ -42,10 +42,11 @@ FONT_FAMILY = "BIZUDGothic"
 FONT_SIZES = (8, 10, 12, 14, 16, 18)
 FONT_BASE_URL = "https://github.com/zrn-ns/crosspoint-jp/releases/download/sd-fonts/"
 
-# 起動からの経過ミリ秒（millis()）。スモークテストは待ち時間を挟まずに進むので、
-# 本が開いてリーダーが描かれるのは 1.8〜2.4 秒あたり。時刻を狙い撃ちにすると
-# 環境差で外すため、0.1 秒刻みで広めに撮って後から使えるコマを選ぶ。
-SHOT_SCHEDULE_MS = tuple(range(1500, 4100, 100))
+# 起動からの経過ミリ秒（millis()）。本が開いてリーダーが描かれるまでの時間は
+# 環境で大きく変わる（手元では 3.3 秒、WSL の /mnt 越しでは 5.7 秒）。時刻を
+# 狙い撃ちにすると外すので、広めに撮って後から使えるコマを選ぶ。ページ送りは
+# リーダー描画のさらに後なので、終端は余裕をもって取る。
+SHOT_SCHEDULE_MS = tuple(range(1500, 10001, 250))
 
 
 def build_simulator(env: str) -> None:
@@ -57,28 +58,40 @@ def program_path(env: str) -> Path:
     return ROOT / ".pio" / "build" / env / "program"
 
 
-def fetch_fonts(dest: Path, font_dir: Path | None) -> None:
+def fetch_fonts(dest: Path, source_dir: Path) -> None:
     """本文用の .cpfont を fs_/.fonts/<family>/ に置く。"""
     family_dir = dest / ".fonts" / FONT_FAMILY
     family_dir.mkdir(parents=True, exist_ok=True)
 
     for size in FONT_SIZES:
         name = f"{FONT_FAMILY}_{size}.cpfont"
-        target = family_dir / name
-        if font_dir is not None:
-            source = font_dir / name
-            if not source.exists():
-                raise SystemExit(f"font not found: {source}")
-            shutil.copy2(source, target)
+        source = source_dir / name
+        if not source.exists():
+            raise SystemExit(f"font not found: {source}")
+        shutil.copy2(source, family_dir / name)
+    print(f"Fonts ready in {family_dir}", flush=True)
+
+
+def ensure_font_cache(cache_dir: Path) -> Path:
+    """.cpfont の取得置き場。無いものだけ落とす。
+
+    疑似SDカード（fs_）は毎回作り直すので、フォントをその中に置くと実行の
+    たびに落とし直しになる。fs_ の外に置いて、そこから複製する。
+    """
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    for size in FONT_SIZES:
+        name = f"{FONT_FAMILY}_{size}.cpfont"
+        target = cache_dir / name
+        if target.exists() and target.stat().st_size > 0:
             continue
         url = FONT_BASE_URL + name
         print(f"  downloading {name} ...", flush=True)
         with urllib.request.urlopen(url, timeout=120) as response:
             target.write_bytes(response.read())
-    print(f"Fonts ready in {family_dir}", flush=True)
+    return cache_dir
 
 
-def write_settings(dest: Path, vertical: bool) -> None:
+def write_settings(dest: Path, vertical: bool, overrides: dict | None = None) -> None:
     """縦組み＋日本語フォントの設定を書く。
 
     設定は CrossPointSettings::toJson() が書くのと同じ平たい JSON。ここでは
@@ -95,21 +108,26 @@ def write_settings(dest: Path, vertical: bool) -> None:
         # 読みやすさに関係しない要素は落として、本文だけを見えるようにする。
         "bionicReading": 0,
         "guideReading": 0,
+        # 進捗バーは既定で非表示。縦組みでは右から左へ伸ばすので、
+        # 向きを絵で確かめられるように出しておく（0 = 本全体の進捗）。
+        "statusBarProgressBar": 0,
     }
+    if overrides:
+        settings.update(overrides)
     path = settings_dir / "crossink-settings.json"
     path.write_text(json.dumps(settings, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"Settings written: {path}", flush=True)
 
 
-def prepare_fs(root: Path, book: Path, vertical: bool, font_dir: Path | None) -> str:
+def prepare_fs(root: Path, book: Path, vertical: bool, font_source: Path, overrides: dict | None = None) -> str:
     fs_root = root / "fs_"
     if fs_root.exists():
         shutil.rmtree(fs_root)
     books = fs_root / "books"
     books.mkdir(parents=True, exist_ok=True)
     shutil.copy2(book, books / book.name)
-    fetch_fonts(fs_root, font_dir)
-    write_settings(fs_root, vertical)
+    fetch_fonts(fs_root, font_source)
+    write_settings(fs_root, vertical, overrides)
     return f"/books/{book.name}"
 
 
@@ -120,8 +138,15 @@ def main() -> int:
     parser.add_argument("--env", default="x4-pro-simulator")
     parser.add_argument("--horizontal", action="store_true", help="横組みで撮る（比較用）")
     parser.add_argument("--no-build", dest="build", action="store_false")
-    parser.add_argument("--font-dir", default=None, help="ダウンロードせず既存の .cpfont を使う")
+    parser.add_argument("--font-dir", default=None, help="ダウンロードせず既存の .cpfont を使う（既定は <out>/fonts-cache）")
     parser.add_argument("--timeout", type=int, default=90)
+    parser.add_argument(
+        "--setting",
+        action="append",
+        default=[],
+        metavar="KEY=VALUE",
+        help="設定を1つ上書きする（例 --setting lineHeightPercent=180）。数値は数値として書く",
+    )
     parser.set_defaults(build=True)
     args = parser.parse_args()
 
@@ -144,7 +169,20 @@ def main() -> int:
     run_root.mkdir(exist_ok=True)
 
     vertical = not args.horizontal
-    book_path = prepare_fs(run_root, book, vertical, Path(args.font_dir) if args.font_dir else None)
+    font_source = (
+        Path(args.font_dir).resolve() if args.font_dir else ensure_font_cache(out_dir / "fonts-cache")
+    )
+    overrides: dict = {}
+    for item in args.setting:
+        key, _, raw = item.partition("=")
+        if not key or not raw:
+            print(f"bad --setting (expected KEY=VALUE): {item}", file=sys.stderr)
+            return 2
+        try:
+            overrides[key] = int(raw)
+        except ValueError:
+            overrides[key] = raw
+    book_path = prepare_fs(run_root, book, vertical, font_source, overrides)
 
     # シミュレータは SDL_SaveBMP で書く（PNG ではない）。見るときに扱いやすい
     # ように、撮ったあとで PNG へ変換する（Pillow があれば）。
