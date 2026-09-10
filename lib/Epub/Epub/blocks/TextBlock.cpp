@@ -227,11 +227,31 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
     const EpdFontFamily::Style currentStyle = wordStyle(i);
 
     if (vertical) {
-      // 縦組みの第一版は素の本文だけを描く。ルビ・バイオニックリーディング・
-      // ガイドドット・背景反転はいずれも横組みの座標系で位置を持っているので、
-      // 縦組みでそのまま使うと表示が壊れる。縦組み用の配置を入れるまでは
-      // 出さない（ルビは縦組みでは列の右側に置くのが正しい）。
-      renderer.drawTextVertical(fontId, x, y + wordXpos(i), word, foregroundBlack, currentStyle);
+      // 縦組みではルビを親文字の右に振る。組版は「幅と高さを入れ替えた紙面」で
+      // 行っているので、横組みで行の上に取ってある余白（getRubyShift）が、
+      // そのまま列の右の余白になる。親文字をその分だけ左へ寄せて空ける。
+      //
+      // バイオニックリーディング・ガイドドット・背景反転はまだ出していない。
+      // どれも横組みの座標系で位置を持っていて、縦組み用の置き方が要る。
+      const int baseX = x - getRubyShift(ascender);
+      renderer.drawTextVertical(fontId, baseX, y + wordXpos(i), word, foregroundBlack, currentStyle);
+
+      if (i < rubyTexts.size() && !rubyTexts[i].empty() && (currentStyle & EpdFontFamily::RUBY_CONTINUE) == 0) {
+        uint16_t groupWords = 1;
+        while (i + groupWords < numWords && (wordStyle(i + groupWords) & EpdFontFamily::RUBY_CONTINUE) != 0) {
+          ++groupWords;
+        }
+        // 縦組みモードでは getTextAdvanceX() が列方向の送りを返す。
+        int groupLength = 0;
+        for (uint16_t j = 0; j < groupWords; ++j) {
+          groupLength += renderer.getTextAdvanceX(fontId, wordText(i + j), wordStyle(i + j));
+        }
+        const int rubyLength = renderer.getTextAdvanceX(fontId, rubyTexts[i].c_str(), EpdFontFamily::SUP);
+        // 親文字の右端から始める。列の中では親文字の並びの中央に合わせる。
+        const int rubyX = baseX + renderer.getVerticalCellWidth(fontId, word, currentStyle);
+        const int rubyY = y + wordXpos(i) + (groupLength - rubyLength) / 2;
+        renderer.drawTextVertical(fontId, rubyX, rubyY, rubyTexts[i].c_str(), foregroundBlack, EpdFontFamily::SUP);
+      }
       continue;
     }
 

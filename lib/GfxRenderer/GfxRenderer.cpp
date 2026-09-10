@@ -3280,6 +3280,14 @@ int GfxRenderer::getTextAdvanceVertical(const int fontId, const char* text, cons
   return total;
 }
 
+int GfxRenderer::getVerticalCellWidth(const int fontId, const char* text, const EpdFontFamily::Style style) const {
+  if (text == nullptr || *text == ' ') return 0;
+  const auto* p = reinterpret_cast<const uint8_t*>(text);
+  const uint32_t cp = utf8NextCodepoint(&p);
+  if (cp == 0) return 0;
+  return verticalCharCellSize(resolveTextFontId(fontId, text, style), cp, style);
+}
+
 void GfxRenderer::drawTextVertical(const int fontId, const int x, const int y, const char* text, const bool black,
                                    const EpdFontFamily::Style style) const {
   if (text == nullptr || *text == '\0') return;
@@ -3345,9 +3353,14 @@ void GfxRenderer::drawTextVertical(const int fontId, const int x, const int y, c
     const int advance = verticalCharCellSize(resolvedFontId, cp, style);
     const EpdGlyph* glyph = font.getGlyph(cp, style);
 
+    // ルビ（SUP）と下付きは半分の大きさで描く。送りは getTextAdvanceX 経由で
+    // すでに半分になっているので、等倍で描くと字が重なって列からはみ出す。
+    const bool supSub = (style & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0;
+
     const EpdGlyph* vertGlyph = nullptr;
     const uint8_t* vertBitmap = nullptr;
-    if (sdFont && VerticalTextUtils::shouldUseVertGlyph(cp)) {
+    // 縦用字形は等倍で貼るので、縮小して描く字には使わない。
+    if (!supSub && sdFont && VerticalTextUtils::shouldUseVertGlyph(cp)) {
       vertGlyph = sdFont->getVertGlyph(cp, static_cast<uint8_t>(style));
       if (vertGlyph) vertBitmap = sdFont->getVertBitmap(vertGlyph, static_cast<uint8_t>(style));
     }
@@ -3359,6 +3372,8 @@ void GfxRenderer::drawTextVertical(const int fontId, const int x, const int y, c
 
     if (vertGlyph && vertBitmap) {
       blitVertGlyph(*this, renderMode, *vertGlyph, vertBitmap, fontData->is2Bit, x, yPos + ascender, black);
+    } else if (supSub) {
+      renderCharScaled(*this, renderMode, font, cp, x, yPos + ascender / 2, black, style);
     } else {
       // 小書き仮名は横組み用に「セルの下寄り中央」で設計されている。縦組みでは
       // 右上に寄せるのが正しいので、実測した vert 変位ぶんだけ動かして描く。

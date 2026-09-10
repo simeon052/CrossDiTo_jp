@@ -361,6 +361,9 @@ class GfxRenderer {
 
   // 組版座標 (layoutX, layoutY) を画面座標へ。縦組みでないときは素通し。
   void mapVerticalLayoutPoint(int layoutX, int layoutY, int& screenX, int& screenY) const;
+  // 縦組みで先頭1文字ぶんの列の太さ。ルビを親文字の右へ逃がす量に使う。
+  // 空文字なら 0。
+  int getVerticalCellWidth(int fontId, const char* text, EpdFontFamily::Style style) const;
 
   class VerticalTextScope {
     const GfxRenderer& renderer_;

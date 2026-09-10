@@ -23,7 +23,7 @@ See [docs/japanese.md](./docs/japanese.md) for the implementation notes.
 |---|---|
 | 日本語UI | 774キー中 765キーを翻訳。設定 → 言語 で「日本語」を選ぶ |
 | 日本語フォント | `.cpfont v5` を受け付けるようにし、BIZ UDGothic / BIZ UD明朝 / NotoSansJP / NotoSerifJP を取得できるようにした |
-| 縦組み | 段組みの流し込み、句読点・かぎ括弧の縦用字形、欧文の90°回転、小書き仮名の変位。禁則は既存の処理をそのまま使う |
+| 縦組み | 段組みの流し込み、句読点・かぎ括弧の縦用字形、欧文の90°回転、小書き仮名の変位、ルビ。禁則は既存の処理をそのまま使う |
 | 右綴じ | 縦組みではタップとスワイプのページ送り方向を裏返し、進捗バーを右端から左へ伸ばす |
 | 行間・字間 | 行間（70〜200%）が列の間隔として効く。字間は縦組み用に0〜30%を新設 |
 | 同梱言語の削減 | 英語＋日本語のみを焼く。文字列データが 422,112 B → 37,178 B になり、空いた領域を縦組みに充てた |
@@ -31,12 +31,13 @@ See [docs/japanese.md](./docs/japanese.md) for the implementation notes.
 
 ### 画面
 
-| 縦組みの本文 | 日本語UI（リーダーメニュー） | 日本語UI（設定） |
-|---|---|---|
-| ![縦組みで表示された日本語の本文](./docs/images/japanese/vertical-reader.png) | ![リーダーメニューが日本語で表示されている](./docs/images/japanese/ui-reader-menu.png) | ![設定画面が日本語で表示されている](./docs/images/japanese/ui-settings.png) |
+| 縦組みの本文 | ルビ（振り仮名） | 日本語UI（リーダーメニュー） | 日本語UI（設定） |
+|---|---|---|---|
+| ![縦組みで表示された日本語の本文](./docs/images/japanese/vertical-reader.png) | ![ルビが親文字の右に半分の大きさで振られている](./docs/images/japanese/vertical-ruby.png) | ![リーダーメニューが日本語で表示されている](./docs/images/japanese/ui-reader-menu.png) | ![設定画面が日本語で表示されている](./docs/images/japanese/ui-settings.png) |
 
 列は右から左、字は上から下。かぎ括弧と句読点は縦用の字形に置き換わり、`CrossDiTo` や
 `ESP32-S3` は90°回して流れる。折り返しの行頭に句読点や閉じ括弧は来ない。
+ルビは親文字の右に、半分の大きさで振る。
 
 行間（既存の設定）はそのまま列の間隔になる。左が 80%、右が 200%。
 
@@ -54,7 +55,7 @@ See [docs/japanese.md](./docs/japanese.md) for the implementation notes.
 ### 既知の制限
 
 - 画像や表を含む本は縦組みで崩れる。組版を「幅と高さを入れ替えた紙面」で行っているため
-- 縦組みではルビ・バイオニックリーディング・ガイドドットを描いていない（横組みでは出る）
+- 縦組みではバイオニックリーディング・ガイドドットを描いていない（横組みでは出る）
 - 行間を詰めすぎると列が重なる。ただし同じ値では横組みでも行が重なる
 - 日本語フォントの配信は [zrn-ns/crosspoint-jp](https://github.com/zrn-ns/crosspoint-jp) の
   リリース資産に依存している。常用するなら自前にミラーすること
