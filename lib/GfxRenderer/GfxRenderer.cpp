@@ -3166,6 +3166,17 @@ void blitVertGlyph(const GfxRenderer& renderer, const GfxRenderer::RenderMode re
 
 }  // namespace
 
+void GfxRenderer::mapVerticalLayoutPoint(const int layoutX, const int layoutY, int& screenX, int& screenY) const {
+  if (!verticalTextMode_) {
+    screenX = layoutX;
+    screenY = layoutY;
+    return;
+  }
+  const auto& t = verticalPageTransform_;
+  screenX = t.contentRight - layoutY - t.columnWidth;
+  screenY = t.contentTop + layoutX;
+}
+
 int GfxRenderer::verticalCellAdvance(const int advancePx) const {
   return advancePx + advancePx * verticalCharSpacingPercent_ / 100;
 }

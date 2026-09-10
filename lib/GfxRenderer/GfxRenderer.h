@@ -42,6 +42,20 @@ class GfxRenderer {
     LandscapeCounterClockwise  // 800x480 logical coordinates, native panel orientation
   };
 
+  // 縦組みの紙面。組版は「幅＝画面の高さ、高さ＝画面の幅」に入れ替えた紙面で
+  // 横組みとして行い（そうすると既存のレイアウトエンジンをそのまま使える）、
+  // 配置の瞬間にここで画面座標へ戻す。
+  //
+  //   画面x = contentRight − 組版y − columnWidth   （列は右から左へ積む）
+  //   画面y = contentTop   + 組版x                 （字は上から下へ進む）
+  //
+  // columnWidth は1列の幅で、回転した紙面での「行の高さ」と同じ値。
+  struct VerticalPageTransform {
+    int contentRight = 0;
+    int contentTop = 0;
+    int columnWidth = 0;
+  };
+
  private:
   static constexpr size_t BW_BUFFER_CHUNK_SIZE = 8000;  // 8KB chunks to allow for non-contiguous memory
   static constexpr size_t MAX_BW_BUFFER_CHUNKS =
@@ -121,6 +135,7 @@ class GfxRenderer {
   // VerticalTextScope が出し入れする。const メソッドである測定・描画から
   // 触るので mutable（fontCacheManager_ と同じ割り切り）。
   mutable bool verticalTextMode_ = false;
+  mutable VerticalPageTransform verticalPageTransform_{};
   void freeBwBufferChunks();
   void freeBitmapScratchBuffers();
   bool ensureBitmapScratchBuffers(size_t outputRowSize, size_t rowBytesSize) const;
@@ -324,16 +339,28 @@ class GfxRenderer {
   // 下の VerticalTextScope で「本文の組版・描画」だけを囲む形にしている。
   bool isVerticalTextMode() const { return verticalTextMode_; }
 
+  const VerticalPageTransform& verticalPageTransform() const { return verticalPageTransform_; }
+
+  // 組版座標 (layoutX, layoutY) を画面座標へ。縦組みでないときは素通し。
+  void mapVerticalLayoutPoint(int layoutX, int layoutY, int& screenX, int& screenY) const;
+
   class VerticalTextScope {
     const GfxRenderer& renderer_;
-    const bool previous_;
+    const bool previousMode_;
+    const VerticalPageTransform previousTransform_;
 
    public:
-    VerticalTextScope(const GfxRenderer& renderer, const bool vertical)
-        : renderer_(renderer), previous_(renderer.verticalTextMode_) {
+    VerticalTextScope(const GfxRenderer& renderer, const bool vertical, const VerticalPageTransform& transform = {})
+        : renderer_(renderer),
+          previousMode_(renderer.verticalTextMode_),
+          previousTransform_(renderer.verticalPageTransform_) {
       renderer_.verticalTextMode_ = vertical;
+      renderer_.verticalPageTransform_ = transform;
     }
-    ~VerticalTextScope() { renderer_.verticalTextMode_ = previous_; }
+    ~VerticalTextScope() {
+      renderer_.verticalTextMode_ = previousMode_;
+      renderer_.verticalPageTransform_ = previousTransform_;
+    }
     VerticalTextScope(const VerticalTextScope&) = delete;
     VerticalTextScope& operator=(const VerticalTextScope&) = delete;
   };

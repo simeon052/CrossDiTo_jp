@@ -29,6 +29,16 @@ void renderFilteredPageElements(const std::vector<std::unique_ptr<PageElement>>&
 
 void PageLine::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset,
                       const bool foregroundBlack) {
+  // 縦組みでは組版が「幅と高さを入れ替えた紙面」で行われている。行は列、
+  // 行内の位置は列内の位置で、ここで画面座標へ戻す（xOffset/yOffset は
+  // 紙面そのものの位置なので、変換の外側で足されている前提）。
+  if (renderer.isVerticalTextMode()) {
+    int screenX = 0;
+    int screenY = 0;
+    renderer.mapVerticalLayoutPoint(xPos, yPos, screenX, screenY);
+    block->render(renderer, fontId, screenX, screenY, foregroundBlack);
+    return;
+  }
   block->render(renderer, fontId, xPos + xOffset, yPos + yOffset, foregroundBlack);
 }
 

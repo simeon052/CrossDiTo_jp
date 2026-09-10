@@ -367,6 +367,16 @@ SectionFallbackResult runSectionBuildFallbacks(const EpubRenderMode selectedMode
 ReaderRenderSpec readerRenderSpecForProfile(const int fontId, const uint16_t viewportWidth,
                                             const uint16_t viewportHeight, const SectionBuildProfile& profile) {
   ReaderRenderSpec spec = SETTINGS.readerRenderSpec(viewportWidth, viewportHeight, profile.renderMode);
+  if (spec.verticalWriting) {
+    // 縦組みは「幅と高さを入れ替えた紙面」で横組みとして組む。列は紙面上の
+    // 「行」として上から下へ積まれ、配置の瞬間に画面座標へ戻す
+    // （GfxRenderer::VerticalPageTransform）。こうすると ChapterHtmlSlimParser
+    // にある49か所の高さ計算を1つも書き換えずに済む。
+    // 代償として画像と表は回転した紙面に置かれ、幅と高さの意味が入れ替わる。
+    // 本文だけの本は正しく組めるが、画像を含む本は崩れる（既知の制限）。
+    spec.viewportWidth = viewportHeight;
+    spec.viewportHeight = viewportWidth;
+  }
   spec.fontId = fontId;
   spec.embeddedStyle = profile.embeddedStyle;
   spec.bionicReadingEnabled = profile.bionicReadingEnabled;
