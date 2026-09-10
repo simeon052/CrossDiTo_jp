@@ -114,6 +114,7 @@ def parse_yaml_file(filepath: str) -> Dict[str, str]:
 def load_translations(
     translations_dir: str,
     verbose: bool = False,
+    only_languages: Optional[Set[str]] = None,
 ) -> Tuple[List[str], List[str], List[str], Dict[str, List[str]], List[Set[str]]]:
     """
     Read every YAML file in *translations_dir* and return:
@@ -123,6 +124,13 @@ def load_translations(
         translations     {key: [translation_per_language]}
 
     English is always first;
+
+    *only_languages* limits the build to the given `_language_code` values
+    (English is always kept: it is the reference file and the fallback for
+    missing keys). This exists because every compiled language costs flash,
+    and this fork ships a Japanese build where the other 27 languages are
+    dead weight. Files stay in the tree so an upstream merge still applies
+    cleanly -- the filter is a build-time choice, not a deletion.
     """
     yaml_dir = Path(translations_dir)
     if not yaml_dir.is_dir():
@@ -136,6 +144,24 @@ def load_translations(
     parsed: Dict[str, Dict[str, str]] = {}
     for yf in yaml_files:
         parsed[yf.name] = parse_yaml_file(str(yf))
+
+    if only_languages:
+        wanted = {code.upper() for code in only_languages} | {"EN"}
+        kept = {
+            name: data
+            for name, data in parsed.items()
+            if data.get("_language_code", "").upper() in wanted
+        }
+        missing = wanted - {d.get("_language_code", "").upper() for d in kept.values()}
+        if missing:
+            raise ValueError(
+                "custom_i18n_languages names languages with no YAML file: "
+                + ", ".join(sorted(missing))
+            )
+        if verbose:
+            dropped = len(parsed) - len(kept)
+            print(f"Language filter: keeping {sorted(wanted)} ({dropped} dropped)")
+        parsed = kept
 
     # Identify the English file (must exist)
     english_file = None
@@ -558,9 +584,21 @@ def generate_keys_header(
         "EN", "ES", "FR", "DE", "CS", "PT", "RU", "SV", "RO", "CA", "UK",
         "BE", "IT", "PL", "FI", "DA", "NL", "TR", "KK", "HU", "LT", "SI",
     ]
+    # A build that compiles only some languages has no enum value for the rest.
+    # The table's job is to map an old on-disk index to a language, so an index
+    # whose language is not in this build resolves to English -- the same thing
+    # the loader would fall back to anyway. The table must keep its length, or
+    # old indices shift and every migrated device picks the wrong language.
+    available = set(languages)
     lines.append("// V1 language.bin migration table (frozen enum order from 2f969a9)")
     lines.append("constexpr Language V1_LANGUAGES[] = {")
-    lines.append("    " + ", ".join(f"Language::{c}" for c in v1_codes) + ",")
+    lines.append(
+        "    "
+        + ", ".join(
+            f"Language::{c}" if c in available else "Language::EN" for c in v1_codes
+        )
+        + ","
+    )
     lines.append("};")
     lines.append(
         f"constexpr uint8_t V1_LANGUAGE_COUNT = {len(v1_codes)};"
@@ -825,6 +863,7 @@ def main(
     src_dirs: Optional[List[str]] = None,
     strip_unused: bool = False,
     verbose: bool = False,
+    only_languages: Optional[Set[str]] = None,
 ) -> None:
     # Default paths (relative to project root)
     default_translations_dir = "lib/I18n/translations"
@@ -858,7 +897,7 @@ def main(
 
     try:
         languages, language_names, string_keys, translations, inherited_sets = (
-            load_translations(translations_dir, verbose)
+            load_translations(translations_dir, verbose, only_languages)
         )
 
         # --- Unused-string detection ---
@@ -983,6 +1022,12 @@ if __name__ == "__main__":
         help="Remove unused STR_* keys from the generated output",
     )
     parser.add_argument(
+        "--languages",
+        nargs="+",
+        metavar="CODE",
+        help="Only compile these _language_code values (English is always kept)",
+    )
+    parser.add_argument(
         "--verbose",
         "-v",
         action="store_true",
@@ -995,11 +1040,21 @@ if __name__ == "__main__":
         args.src_dirs,
         args.strip_unused,
         args.verbose,
+        set(args.languages) if args.languages else None,
     )
 else:
     try:
         Import("env")
-        main(strip_unused=True)
+        # custom_i18n_languages = JA        (英語は常に入る)
+        # 指定が無ければ全言語。1言語あたり数十KBの Flash を食うので、
+        # 日本語版のように使う言語が決まっているビルドでは絞る。
+        raw_languages = env.GetProjectOption("custom_i18n_languages", "")
+        selected = {
+            code.strip().upper()
+            for code in re.split(r"[,\s]+", str(raw_languages))
+            if code.strip()
+        }
+        main(strip_unused=True, only_languages=selected or None)
         keys_path = Path("lib/I18n/I18nKeys.h")
         layout_hash = hashlib.sha256(keys_path.read_bytes()).hexdigest()[:16]
         # StrId values are compiled into every tr(...) call. Include the
