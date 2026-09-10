@@ -118,6 +118,9 @@ class GfxRenderer {
   int verticalCellAdvance(int advancePx) const;
   // 縦組みの字間（em に対する%）。既定は 0 で、横組みの挙動には影響しない。
   uint8_t verticalCharSpacingPercent_ = 0;
+  // VerticalTextScope が出し入れする。const メソッドである測定・描画から
+  // 触るので mutable（fontCacheManager_ と同じ割り切り）。
+  mutable bool verticalTextMode_ = false;
   void freeBwBufferChunks();
   void freeBitmapScratchBuffers();
   bool ensureBitmapScratchBuffers(size_t outputRowSize, size_t rowBytesSize) const;
@@ -314,6 +317,26 @@ class GfxRenderer {
   // 縦組みの字間。em に対する百分率で、0-30 に丸める。
   void setVerticalCharSpacing(const uint8_t percent) { verticalCharSpacingPercent_ = percent > 30 ? 30 : percent; }
   uint8_t getVerticalCharSpacing() const { return verticalCharSpacingPercent_; }
+
+  // 縦組みモード。立っている間だけ getTextAdvanceX() が縦の送りを返すので、
+  // 行分割・字送りの計算（ParsedText の17か所の測定呼び出し）を書き換えずに
+  // 縦組みへ流用できる。UI は横組みのまま描くので、生の setter は用意せず、
+  // 下の VerticalTextScope で「本文の組版・描画」だけを囲む形にしている。
+  bool isVerticalTextMode() const { return verticalTextMode_; }
+
+  class VerticalTextScope {
+    const GfxRenderer& renderer_;
+    const bool previous_;
+
+   public:
+    VerticalTextScope(const GfxRenderer& renderer, const bool vertical)
+        : renderer_(renderer), previous_(renderer.verticalTextMode_) {
+      renderer_.verticalTextMode_ = vertical;
+    }
+    ~VerticalTextScope() { renderer_.verticalTextMode_ = previous_; }
+    VerticalTextScope(const VerticalTextScope&) = delete;
+    VerticalTextScope& operator=(const VerticalTextScope&) = delete;
+  };
 
   // Grayscale functions
   void setRenderMode(const RenderMode mode) { this->renderMode = mode; }

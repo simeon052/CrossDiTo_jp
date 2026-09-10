@@ -2796,6 +2796,12 @@ int GfxRenderer::getKerning(const int fontId, const uint32_t leftCp, const uint3
 
 int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, const EpdFontFamily::Style style,
                                  const uint32_t followingCp) const {
+  // 縦組み中は「行方向の送り」が縦になる。行分割（ParsedText）はこの関数で
+  // 測った長さだけを見ているので、ここを差し替えるだけで縦の列割りになる。
+  // 隣接字とのカーニングは縦組みでは使わないので followingCp は捨てる。
+  if (verticalTextMode_) {
+    return getTextAdvanceVertical(fontId, text, style);
+  }
   // Match the font drawText would use for CJK-bearing strings (see resolveTextFontId).
   const int resolvedFontId = resolveTextFontId(fontId, text, style);
   // Measure the exact codepoint stream drawText renders: bidi-reordered and
@@ -3190,9 +3196,12 @@ int GfxRenderer::getTextAdvanceVertical(const int fontId, const char* text, cons
       if (!sidewaysStart) sidewaysStart = charStart;
       continue;
     }
-    // 寝かせる区間が閉じた: 横組みの幅がそのまま縦の送りになる
+    // 寝かせる区間が閉じた: 横組みの幅がそのまま縦の送りになる。
+    // getTextAdvanceX() は縦組みモード中この関数に転送されるので、
+    // 横組みとして測るためにモードを外して呼ぶ（外さないと無限再帰）。
     if (sidewaysStart) {
       const std::string run(sidewaysStart, static_cast<size_t>(charStart - sidewaysStart));
+      const VerticalTextScope horizontal(*this, false);
       total += getTextAdvanceX(resolvedFontId, run.c_str(), style);
       sidewaysStart = nullptr;
     }
@@ -3251,8 +3260,14 @@ void GfxRenderer::drawTextVertical(const int fontId, const int x, const int y, c
     if (sidewaysStart) {
       // 欧文は 90° 回して縦に流す。drawTextRotated90CW は上へ進むので、
       // 区間の長さぶん下から描き始めて結果的に上から下へ並ぶようにする。
+      // 幅の測定は横組みとして行う（縦組みモードのままだと getTextAdvanceX が
+      // この関数へ転送されて無限再帰になる）。
       const std::string run(sidewaysStart, static_cast<size_t>(charStart - sidewaysStart));
-      const int runWidth = getTextAdvanceX(resolvedFontId, run.c_str(), style);
+      int runWidth = 0;
+      {
+        const VerticalTextScope horizontal(*this, false);
+        runWidth = getTextAdvanceX(resolvedFontId, run.c_str(), style);
+      }
       drawTextRotated90CW(resolvedFontId, x, yPos + runWidth, run.c_str(), black, style);
       yPos += runWidth;
       sidewaysStart = nullptr;

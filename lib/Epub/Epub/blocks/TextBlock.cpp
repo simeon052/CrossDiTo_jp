@@ -217,11 +217,24 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
 
   const bool scanning = renderer.isFontCacheScanning();
   const int ascender = renderer.getFontAscenderSize(fontId);
+  // 縦組みでは wordXpos() は「行内の位置」ではなく「列内の位置」を指す。
+  // 行分割は縦の送りで測って作られているので、そのまま y に足せばよい。
+  const bool vertical = renderer.isVerticalTextMode();
   for (uint16_t i = 0; i < numWords; i++) {
     const char* word = wordText(i);
     const uint16_t wordLen = wordTextLen(i);
     const int wordX = wordXpos(i) + x;
     const EpdFontFamily::Style currentStyle = wordStyle(i);
+
+    if (vertical) {
+      // 縦組みの第一版は素の本文だけを描く。ルビ・バイオニックリーディング・
+      // ガイドドット・背景反転はいずれも横組みの座標系で位置を持っているので、
+      // 縦組みでそのまま使うと表示が壊れる。縦組み用の配置を入れるまでは
+      // 出さない（ルビは縦組みでは列の右側に置くのが正しい）。
+      renderer.drawTextVertical(fontId, x, y + wordXpos(i), word, foregroundBlack, currentStyle);
+      continue;
+    }
+
     const uint8_t boundary = bionicBoundary(i);
     const auto baseDir =
         static_cast<BidiUtils::BidiBaseDir>(BidiUtils::detectParagraphLevel(word, blockStyle.isRtl ? 1 : 0));

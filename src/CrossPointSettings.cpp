@@ -819,6 +819,8 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
   spec.guideReadingEnabled = guideReadingEnabled != 0;
   spec.wordSpacing = wordSpacing;
   spec.renderMode = renderMode;
+  spec.verticalWriting = writingMode == WM_VERTICAL;
+  spec.verticalCharSpacing = verticalCharSpacing;
   return spec;
 }
 
