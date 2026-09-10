@@ -107,6 +107,66 @@ jobs:
           path: .pio/build/x4-pro/CrossDiTo-*.bin
           if-no-files-found: error
 
+
+  # 縦組みは「コンパイルが通った」では何も確認できない。シミュレータを
+  # headless で走らせて、実際に描かれた画面を成果物として持ち帰る。
+  # 入力スクリプトが固定の時刻で動くため取りこぼしうる（＝落ちても即ちバグとは
+  # 限らない）ので、test-status の必須チェックには入れていない。挙動の回帰は
+  # scripts/run_simulator_smoke_test.py の側で見る。
+  simulator-screenshots:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+
+      - name: Install SDL2
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsdl2-dev
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Cache PlatformIO packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: ${{ runner.os }}-platformio-simulator-${{ hashFiles('platformio.ini') }}
+          restore-keys: |
+            ${{ runner.os }}-platformio-simulator-
+            ${{ runner.os }}-platformio-
+
+      - name: Install PlatformIO Core
+        run: uv pip install --system -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+
+      - name: Install Pillow
+        run: uv pip install --system pillow
+
+      - name: Generate Japanese test EPUB
+        run: python scripts/generate_japanese_test_epub.py
+
+      - name: Screenshots (vertical)
+        run: python scripts/run_simulator_screenshots.py --out simulator-shots
+
+      - name: Screenshots (horizontal, for comparison)
+        run: python scripts/run_simulator_screenshots.py --no-build --horizontal --out simulator-shots
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: simulator-screenshots
+          path: |
+            simulator-shots/*.png
+            simulator-shots/*.bmp
+          if-no-files-found: warn
+
   # This job is used as the PR required actions check, allows for changes to other steps in the future without breaking
   # PR requirements.
   test-status:
