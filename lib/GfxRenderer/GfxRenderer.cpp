@@ -375,10 +375,40 @@ int GfxRenderer::resolveTextFontId(const int fontId, const char* text, const Epd
     // untouched, and a partial-coverage fallback (e.g. kana-only) is not worth
     // dragging the whole string into for glyphs it would also miss.
     if (utf8IsCjkCodepoint(cp) && !primary.hasCodepoint(cp, style) && fallback.hasCodepoint(cp, style)) {
+      ensureFallbackGlyphsLoaded(fallbackFontId, text, style);
       return fallbackFontId;
     }
   }
   return fontId;
+}
+
+// 回送先の字形をその場で載せる。
+//
+// 本文は組版が走査パス（FontCacheManager::PrewarmScope）で1ページぶんの字を
+// まとめて先読みしてから描く。UIにはその仕掛けが無く、drawText がそのまま
+// 呼ばれる。SDフォントの字形はページ単位の遅延ロードなので、載っていない字は
+// getGlyphData() が置換グリフに落ち、日本語のUIが全部 ◆ になる。
+//
+// 走査パスの最中は何もしない。あちらが最後にまとめて載せる。
+// 直前と同じ要求は素通りさせる。truncatedText() は1文字ずつ削りながら
+// getTextWidth() を繰り返し呼ぶので、毎回SDを読ませるわけにはいかない。
+void GfxRenderer::ensureFallbackGlyphsLoaded(const int fallbackFontId, const char* text,
+                                             const EpdFontFamily::Style style) const {
+  if (!fontCacheManager_ || fontCacheManager_->isScanning()) return;
+  if (sdCardFonts_.find(fallbackFontId) == sdCardFonts_.end()) return;
+
+  const uint8_t styleIdx = static_cast<uint8_t>(style) & 0x03;
+  uint32_t hash = 2166136261U ^ styleIdx;
+  for (const char* p = text; *p != ' '; ++p) {
+    hash ^= static_cast<uint8_t>(*p);
+    hash *= 16777619U;
+  }
+  if (hash == 0) hash = 1;  // 0 は「未設定」に使う
+  if (fallbackFontId == lastFallbackPrewarmFontId_ && hash == lastFallbackPrewarmHash_) return;
+
+  fontCacheManager_->prewarmCache(fallbackFontId, text, static_cast<uint8_t>(1u << styleIdx));
+  lastFallbackPrewarmFontId_ = fallbackFontId;
+  lastFallbackPrewarmHash_ = hash;
 }
 
 // Translate logical (x,y) coordinates to physical panel coordinates based on current orientation

@@ -126,6 +126,13 @@ class GfxRenderer {
   // fontId unchanged. The whole string is routed as a unit so each draw/measure
   // call stays single-font (consistent bit depth, metrics, wrapping).
   int resolveTextFontId(int fontId, const char* text, EpdFontFamily::Style style) const;
+  // 回送先のSDフォントの字形を、描く／測る直前に載せる。UIには本文のような
+  // 走査パスが無いので、ここを通さないと日本語が置換グリフ（◆）で描かれる。
+  void ensureFallbackGlyphsLoaded(int fallbackFontId, const char* text, EpdFontFamily::Style style) const;
+  // 直前に載せた要求。同じものを繰り返し要求されたときにSDを読まないための覚え。
+  // 0 は「まだ何も載せていない」。
+  mutable int lastFallbackPrewarmFontId_ = 0;
+  mutable uint32_t lastFallbackPrewarmHash_ = 0;
   void renderChar(const EpdFontFamily& fontFamily, uint32_t cp, int* x, int* y, bool pixelState,
                   EpdFontFamily::Style style) const;
   // 縦組みで1文字ぶん進む量（字の advance + 字間）。
@@ -180,6 +187,7 @@ class GfxRenderer {
   void removeFont(int fontId) {
     fontMap.erase(fontId);
     sdCardFonts_.erase(fontId);
+    if (fontId == lastFallbackPrewarmFontId_) lastFallbackPrewarmFontId_ = 0;
   }
   void setFontCacheManager(FontCacheManager* m) { fontCacheManager_ = m; }
   FontCacheManager* getFontCacheManager() const { return fontCacheManager_; }
@@ -187,13 +195,20 @@ class GfxRenderer {
   const std::map<int, EpdFontFamily>& getFontMap() const { return fontMap; }
   void registerSdCardFont(int fontId, SdCardFont* font) { sdCardFonts_[fontId] = font; }
   void unregisterSdCardFont(int fontId) { removeFont(fontId); }
-  void clearSdCardFonts() { sdCardFonts_.clear(); }
+  void clearSdCardFonts() {
+    sdCardFonts_.clear();
+    lastFallbackPrewarmFontId_ = 0;
+  }
   const std::map<int, SdCardFont*>& getSdCardFonts() const { return sdCardFonts_; }
   bool isSdCardFont(int fontId) const { return sdCardFonts_.count(fontId) > 0; }
   // Register/clear size-matched CJK UI fallbacks (see fallbackFontMap_).
   // setFallbackFont maps a primary UI font id to an SD font id of the same size.
   void setFallbackFont(int primaryFontId, int fallbackFontId) { fallbackFontMap_[primaryFontId] = fallbackFontId; }
-  void clearFallbackFonts() { fallbackFontMap_.clear(); }
+  void clearFallbackFonts() {
+    fallbackFontMap_.clear();
+    lastFallbackPrewarmFontId_ = 0;
+    lastFallbackPrewarmHash_ = 0;
+  }
   // Ensure SD card font glyph data is loaded for the given text. Called from layout code
   // (which holds a const GfxRenderer&) before measuring word widths. Safe to call on non-SD fonts (no-op).
   // styleMask: bitmask of styles to prepare (bit 0=regular, 1=bold, 2=italic, 3=bold-italic).
