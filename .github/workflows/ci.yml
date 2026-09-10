@@ -122,10 +122,10 @@ jobs:
         with:
           python-version: "3.14"
 
-      - name: Install SDL2
+      - name: Install SDL2 and OpenSSL
         run: |
           sudo apt-get update
-          sudo apt-get install -y libsdl2-dev
+          sudo apt-get install -y libsdl2-dev libssl-dev
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
