@@ -939,7 +939,11 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
       progress = (pageCount > 0) ? (static_cast<float>(currentPage) / pageCount) * 100 : 0;
     }
     const int barWidth = progressBarMaxWidth * progress / 100;
-    renderer.fillRect(orientedMarginLeft, progressBarY, barWidth, statusBar.progressBarHeightPx, foregroundBlack);
+    // 縦組みの本は右から左へ読み進む。棒も同じ向きに伸ばさないと、
+    // 進むほど本文と逆へ動いて見える。
+    const bool rightToLeft = SETTINGS.writingMode == CrossPointSettings::WM_VERTICAL;
+    const int barX = rightToLeft ? (renderer.getScreenWidth() - orientedMarginRight - barWidth) : orientedMarginLeft;
+    renderer.fillRect(barX, progressBarY, barWidth, statusBar.progressBarHeightPx, foregroundBlack);
   }
 
   // Bookmark icon: drawn at the far left of the status bar when the current page is bookmarked.
