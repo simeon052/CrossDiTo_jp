@@ -42,9 +42,10 @@ FONT_FAMILY = "BIZUDGothic"
 FONT_SIZES = (8, 10, 12, 14, 16, 18)
 FONT_BASE_URL = "https://github.com/zrn-ns/crosspoint-jp/releases/download/sd-fonts/"
 
-# 起動からの経過ミリ秒。シミュレータは実時間で動くので、本の読み込みと
-# 組版が終わるだけの余裕を見て撮る。
-SHOT_SCHEDULE_MS = (6000, 9000, 12000)
+# 起動からの経過ミリ秒（millis()）。スモークテストは待ち時間を挟まずに進むので、
+# 本が開いてリーダーが描かれるのは 1.8〜2.4 秒あたり。時刻を狙い撃ちにすると
+# 環境差で外すため、0.1 秒刻みで広めに撮って後から使えるコマを選ぶ。
+SHOT_SCHEDULE_MS = tuple(range(1500, 4100, 100))
 
 
 def build_simulator(env: str) -> None:
@@ -151,29 +152,34 @@ def main() -> int:
     shots = [(ms, out_dir / f"{suffix}-{i + 1}.bmp") for i, ms in enumerate(SHOT_SCHEDULE_MS)]
     schedule = ";".join(f"{ms}:{path}" for ms, path in shots)
 
-    # ホーム画面から本を開き、数ページ送ってから終了する。CONFIRM は
-    # 「最近読んだ本 / ファイル一覧」の選択に使う。
+    # 本を開くのは、ホーム画面をボタンで辿るのではなく、ファームウェア内蔵の
+    # スモークテスト経路（src/simulator/SimulatorSmokeTest.cpp）に任せる。
+    # 画面構成やテーマに左右されず、確実にリーダーまで進む。
     last_ms = SHOT_SCHEDULE_MS[-1]
-    input_script = ";".join(
-        [
-            "2500:DOWN",
-            "3000:CONFIRM",
-            "7000:DOWN",
-            "10000:DOWN",
-            f"{last_ms + 1500}:QUIT",
-        ]
-    )
+    input_script = f"{last_ms + 2000}:QUIT"
 
+    # SDL_VIDEODRIVER=dummy では SDL_CreateRenderer(SDL_RENDERER_ACCELERATED) が
+    # 失敗し、シミュレータの presentIfNeeded() が描画も撮影もせずに戻る
+    # （撮影は SDL_RenderReadPixels でレンダラから読む実装のため）。
+    # 画面を持たない環境では、代わりに仮想Xサーバ越しに動かす。
     env = os.environ.copy()
-    env["SDL_VIDEODRIVER"] = env.get("SDL_VIDEODRIVER", "dummy")
     env["CROSSPOINT_SIM_SD"] = str(run_root / "fs_")
     env["CROSSPOINT_SIM_SCREENSHOTS"] = schedule
     env["CROSSPOINT_SIM_INPUT_SCRIPT"] = input_script
+    env["CROSSINK_SIMULATOR_SMOKE_TEST"] = "1"
     env["CROSSINK_SIMULATOR_SMOKE_BOOK"] = book_path
+    env["CROSSINK_SIMULATOR_SMOKE_PAGE_TURNS"] = "3"
+
+    command = [str(program)]
+    if not env.get("DISPLAY") and shutil.which("xvfb-run"):
+        # -a: 空いているディスプレイ番号を自分で選ぶ
+        command = ["xvfb-run", "-a", "--server-args=-screen 0 1024x1280x24", *command]
+    elif not env.get("DISPLAY"):
+        print("warning: no DISPLAY and xvfb-run not found; screenshots will likely be empty", file=sys.stderr)
 
     print(f"Running simulator ({suffix}) ...", flush=True)
     proc = subprocess.run(
-        [str(program)],
+        command,
         cwd=run_root,
         env=env,
         text=True,

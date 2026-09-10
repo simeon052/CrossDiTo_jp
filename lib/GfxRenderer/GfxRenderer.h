@@ -130,6 +130,9 @@ class GfxRenderer {
                   EpdFontFamily::Style style) const;
   // 縦組みで1文字ぶん進む量（字の advance + 字間）。
   int verticalCellAdvance(int advancePx) const;
+  // 1文字ぶんのセルの大きさ。横組みの測定をそのまま使う（SDフォントの
+  // 字形が未ロードでも正しい送りが取れる経路）。
+  int verticalCharCellSize(int fontId, uint32_t cp, EpdFontFamily::Style style) const;
   // 縦組みの字間（em に対する%）。既定は 0 で、横組みの挙動には影響しない。
   uint8_t verticalCharSpacingPercent_ = 0;
   // VerticalTextScope が出し入れする。const メソッドである測定・描画から

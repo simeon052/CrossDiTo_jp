@@ -3181,10 +3181,37 @@ int GfxRenderer::verticalCellAdvance(const int advancePx) const {
   return advancePx + advancePx * verticalCharSpacingPercent_ / 100;
 }
 
-// 注意（Stage 2c で要対応）: ここは字形表（getGlyph）から advance を取るので、
-// SDフォントでは対象の字がプリウォーム済みである必要がある。横組みの測定は
-// SdCardFont の advance テーブル経由で字形無しでも測れる経路を持っているので、
-// 段組みレイアウトから使う際は同じ経路に合わせること。
+// 1文字ぶんのセルの大きさ。
+//
+// 字形表（getGlyph）から advanceX を読むのではなく、横組みの測定をそのまま
+// 使う。SDカードフォントの字形はページ単位の遅延ロードで、組版の時点では
+// まだ載っていないことがある。getGlyph が nullptr を返すと送り 0 になり、
+// その語の字が全部同じ位置に重なって黒い塊になる（実機の絵で確認した症状）。
+// getTextAdvanceX は SdCardFont の advance テーブル経由で、字形が無くても
+// 正しい送りを返す。
+int GfxRenderer::verticalCharCellSize(const int fontId, const uint32_t cp, const EpdFontFamily::Style style) const {
+  char buf[5] = {};
+  if (cp < 0x80) {
+    buf[0] = static_cast<char>(cp);
+  } else if (cp < 0x800) {
+    buf[0] = static_cast<char>(0xC0 | (cp >> 6));
+    buf[1] = static_cast<char>(0x80 | (cp & 0x3F));
+  } else if (cp < 0x10000) {
+    buf[0] = static_cast<char>(0xE0 | (cp >> 12));
+    buf[1] = static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+    buf[2] = static_cast<char>(0x80 | (cp & 0x3F));
+  } else {
+    buf[0] = static_cast<char>(0xF0 | (cp >> 18));
+    buf[1] = static_cast<char>(0x80 | ((cp >> 12) & 0x3F));
+    buf[2] = static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+    buf[3] = static_cast<char>(0x80 | (cp & 0x3F));
+  }
+  const VerticalTextScope horizontal(*this, false);
+  return getTextAdvanceX(fontId, buf, style);
+}
+
+// 縦組みの文字列の高さ（列方向の長さ）。送りは verticalCharCellSize 経由で
+// 取るので、字形が未ロードでも正しい。
 int GfxRenderer::getTextAdvanceVertical(const int fontId, const char* text, const EpdFontFamily::Style style) const {
   if (text == nullptr || *text == '\0') return 0;
 
@@ -3218,9 +3245,7 @@ int GfxRenderer::getTextAdvanceVertical(const int fontId, const char* text, cons
     }
     if (end) break;
 
-    const EpdGlyph* glyph = font.getGlyph(cp, style);
-    if (!glyph) continue;
-    total += verticalCellAdvance(fp4::toPixel(static_cast<int32_t>(glyph->advanceX)));
+    total += verticalCellAdvance(verticalCharCellSize(resolvedFontId, cp, style));
   }
   return total;
 }
@@ -3285,15 +3310,21 @@ void GfxRenderer::drawTextVertical(const int fontId, const int x, const int y, c
     }
     if (end) break;
 
+    // 送りは組版と同じ経路で取る。ここがずれると、組版が想定した位置と
+    // 描画位置が食い違ってページからはみ出す。
+    const int advance = verticalCharCellSize(resolvedFontId, cp, style);
     const EpdGlyph* glyph = font.getGlyph(cp, style);
-    if (!glyph) continue;
-    const int advance = fp4::toPixel(static_cast<int32_t>(glyph->advanceX));
 
     const EpdGlyph* vertGlyph = nullptr;
     const uint8_t* vertBitmap = nullptr;
     if (sdFont && VerticalTextUtils::shouldUseVertGlyph(cp)) {
       vertGlyph = sdFont->getVertGlyph(cp, static_cast<uint8_t>(style));
       if (vertGlyph) vertBitmap = sdFont->getVertBitmap(vertGlyph, static_cast<uint8_t>(style));
+    }
+
+    if (!glyph) {
+      yPos += verticalCellAdvance(advance);
+      continue;
     }
 
     if (vertGlyph && vertBitmap) {
