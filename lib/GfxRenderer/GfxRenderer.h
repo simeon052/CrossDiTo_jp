@@ -350,7 +350,13 @@ class GfxRenderer {
     const VerticalPageTransform previousTransform_;
 
    public:
-    VerticalTextScope(const GfxRenderer& renderer, const bool vertical, const VerticalPageTransform& transform = {})
+    // 紙面を伴わない版（組版の測定だけ縦にしたいとき）。デフォルト引数の
+    // `= {}` は、この時点で VerticalPageTransform が不完全型として扱われる
+    // ため GCC が受け付けない。委譲コンストラクタで代替している。
+    VerticalTextScope(const GfxRenderer& renderer, const bool vertical)
+        : VerticalTextScope(renderer, vertical, VerticalPageTransform()) {}
+
+    VerticalTextScope(const GfxRenderer& renderer, const bool vertical, const VerticalPageTransform& transform)
         : renderer_(renderer),
           previousMode_(renderer.verticalTextMode_),
           previousTransform_(renderer.verticalPageTransform_) {

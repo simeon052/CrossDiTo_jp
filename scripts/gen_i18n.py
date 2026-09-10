@@ -497,6 +497,16 @@ def generate_keys_header(
     lines.append("};")
     lines.append("")
 
+    # Per-language presence macros. custom_i18n_languages can leave a language
+    # out of the build entirely, and then `Language::FR` does not exist -- code
+    # that keys off a specific language (keyboard layouts, for one) has to be
+    # able to compile itself out. An absent macro is 0 in #if, so only the
+    # present ones need emitting.
+    lines.append("// Which languages this build compiled (see custom_i18n_languages).")
+    for lang in languages:
+        lines.append(f"#define I18N_HAS_{lang} 1")
+    lines.append("")
+
     # Extern declarations
     lines.append("// Language codes (defined in I18nStrings.cpp)")
     lines.append("extern const char* const LANGUAGE_CODES[];")
