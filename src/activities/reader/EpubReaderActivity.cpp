@@ -6069,6 +6069,21 @@ void EpubReaderActivity::prepareCurrentSectionForRelayout() {
 void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int fontId, const int orientedMarginTop,
                                         const int orientedMarginRight, const int orientedMarginBottom,
                                         const int orientedMarginLeft, const bool updatePanel) {
+  // 縦組みでは、組版が「幅と高さを入れ替えた紙面」で行われている。ここで
+  // 紙面の右上と列幅を渡しておくと、各ページ要素が配置の瞬間に画面座標へ
+  // 戻す（GfxRenderer::mapVerticalLayoutPoint）。この関数がリーダーの描画の
+  // 唯一の入口なので、走査パスも本描画もグレースケールも一括で覆える。
+  const bool verticalWriting = SETTINGS.writingMode == CrossPointSettings::WM_VERTICAL;
+  GfxRenderer::VerticalPageTransform verticalTransform;
+  if (verticalWriting) {
+    verticalTransform.contentRight = renderer.getScreenWidth() - orientedMarginRight;
+    verticalTransform.contentTop = orientedMarginTop;
+    verticalTransform.columnWidth =
+        std::max(1, static_cast<int>(renderer.getLineHeight(fontId) * SETTINGS.getReaderLineCompression() + 0.5f));
+    renderer.setVerticalCharSpacing(SETTINGS.verticalCharSpacing);
+  }
+  const GfxRenderer::VerticalTextScope verticalScope(renderer, verticalWriting, verticalTransform);
+
   // Font prewarm: scan pass accumulates text, then prewarm, then real render
   auto* fcm = renderer.getFontCacheManager();
   auto scope = fcm->createPrewarmScope();

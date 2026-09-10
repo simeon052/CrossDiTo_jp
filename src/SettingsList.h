@@ -446,9 +446,13 @@ inline const std::vector<SettingInfo>& getBaseSettingsList() {
         StrId::STR_WORD_SPACING, &CrossPointSettings::wordSpacing,
         {StrId::STR_NORMAL, StrId::STR_LEVEL_1, StrId::STR_LEVEL_2, StrId::STR_LEVEL_3, StrId::STR_LEVEL_4},
         "wordSpacing", StrId::STR_CAT_READER));
-    // 組み方向（writingMode）と縦書きの字間（verticalCharSpacing）の設定項目は、
-    // まだ出していない。段組みの流し込み（列を右から左へ積む）が未実装で、
-    // いま選べるようにしても何も起きないため。docs/japanese.md の Stage 2c 参照。
+    // 組み方向。切り替えるとセクションキャッシュの署名が変わるので、開いている
+    // 本は組み直しになる（ReaderRenderSpec::verticalWriting）。
+    // 画像や表を含む本は縦組みで崩れる（既知の制限。docs/japanese.md 参照）。
+    add(SettingInfo::Enum(StrId::STR_WRITING_MODE, &CrossPointSettings::writingMode,
+                          {StrId::STR_WM_HORIZONTAL, StrId::STR_WM_VERTICAL}, "writingMode", StrId::STR_CAT_READER));
+    add(SettingInfo::Value(StrId::STR_VERTICAL_CHAR_SPACING, &CrossPointSettings::verticalCharSpacing, {0, 30, 5},
+                           "verticalCharSpacing", StrId::STR_CAT_READER));
     add(SettingInfo::Enum(
             StrId::STR_ORIENTATION, &CrossPointSettings::orientation,
             {StrId::STR_PORTRAIT, StrId::STR_LANDSCAPE_CW, StrId::STR_LANDSCAPE_CCW, StrId::STR_ORIENTATION_INVERTED},
