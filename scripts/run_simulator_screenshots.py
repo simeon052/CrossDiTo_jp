@@ -106,8 +106,8 @@ def write_settings(dest: Path, vertical: bool, overrides: dict | None = None) ->
         "verticalCharSpacing": 0,
         "language": "JA",
         # 読みやすさに関係しない要素は落として、本文だけを見えるようにする。
-        "bionicReading": 0,
-        "guideReading": 0,
+        "bionicReadingEnabled": 0,
+        "guideReadingEnabled": 0,
         # 進捗バーは既定で非表示。縦組みでは右から左へ伸ばすので、
         # 向きを絵で確かめられるように出しておく（0 = 本全体の進捗）。
         "statusBarProgressBar": 0,
@@ -140,6 +140,12 @@ def main() -> int:
     parser.add_argument("--no-build", dest="build", action="store_false")
     parser.add_argument("--font-dir", default=None, help="ダウンロードせず既存の .cpfont を使う（既定は <out>/fonts-cache）")
     parser.add_argument("--timeout", type=int, default=90)
+    parser.add_argument(
+        "--page-turns",
+        type=int,
+        default=3,
+        help="スモークテストが送るページ数。少なくすると前のページに留まる",
+    )
     parser.add_argument(
         "--setting",
         action="append",
@@ -206,7 +212,7 @@ def main() -> int:
     env["CROSSPOINT_SIM_INPUT_SCRIPT"] = input_script
     env["CROSSINK_SIMULATOR_SMOKE_TEST"] = "1"
     env["CROSSINK_SIMULATOR_SMOKE_BOOK"] = book_path
-    env["CROSSINK_SIMULATOR_SMOKE_PAGE_TURNS"] = "3"
+    env["CROSSINK_SIMULATOR_SMOKE_PAGE_TURNS"] = str(args.page_turns)
 
     command = [str(program)]
     if not env.get("DISPLAY") and shutil.which("xvfb-run"):

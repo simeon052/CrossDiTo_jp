@@ -91,6 +91,10 @@ CH1 = """<?xml version="1.0" encoding="UTF-8"?>
 <p>ルビの確認。<ruby>漢字<rt>かんじ</rt></ruby>と<ruby>振<rt>ふ</rt></ruby>り
 <ruby>仮名<rt>がな</rt></ruby>。縦組みでは親文字の右に、
 半分の大きさで振られていれば正しい。</p>
+
+<p>文字装飾の確認。<u>ここが傍線</u>で、縦組みでは列の左に引かれる。
+<s>ここが打ち消し線</s>で、こちらは列の中央を通る。
+<span style="background-color:#000000;color:#ffffff">ここが背景反転</span>。</p>
 </body>
 </html>
 """
