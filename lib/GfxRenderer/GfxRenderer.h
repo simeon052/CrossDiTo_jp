@@ -114,6 +114,10 @@ class GfxRenderer {
   int resolveTextFontId(int fontId, const char* text, EpdFontFamily::Style style) const;
   void renderChar(const EpdFontFamily& fontFamily, uint32_t cp, int* x, int* y, bool pixelState,
                   EpdFontFamily::Style style) const;
+  // 縦組みで1文字ぶん進む量（字の advance + 字間）。
+  int verticalCellAdvance(int advancePx) const;
+  // 縦組みの字間（em に対する%）。既定は 0 で、横組みの挙動には影響しない。
+  uint8_t verticalCharSpacingPercent_ = 0;
   void freeBwBufferChunks();
   void freeBitmapScratchBuffers();
   bool ensureBitmapScratchBuffers(size_t outputRowSize, size_t rowBytesSize) const;
@@ -297,6 +301,19 @@ class GfxRenderer {
   void drawTextRotated90CW(int fontId, int x, int y, const char* text, bool black = true,
                            EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
   int getTextHeight(int fontId) const;
+
+  // --- 縦書き（tategaki） ---------------------------------------------------
+  // text を (x, y) から下へ向けて描く。x は文字セルの左端、y はセルの上端。
+  // 漢字・仮名は正立、欧文と記号は 90° 回して一続きに流す。SDフォントが
+  // .cpfont v5 の vert 字形を持つ場合、句読点・括弧・長音はそれを使う。
+  void drawTextVertical(int fontId, int x, int y, const char* text, bool black = true,
+                        EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
+  // drawTextVertical() が消費する縦方向の長さ。行（列）分割の測定に使う。
+  // 横組みでの getTextAdvanceX() に対応する。
+  int getTextAdvanceVertical(int fontId, const char* text, EpdFontFamily::Style style) const;
+  // 縦組みの字間。em に対する百分率で、0-30 に丸める。
+  void setVerticalCharSpacing(const uint8_t percent) { verticalCharSpacingPercent_ = percent > 30 ? 30 : percent; }
+  uint8_t getVerticalCharSpacing() const { return verticalCharSpacingPercent_; }
 
   // Grayscale functions
   void setRenderMode(const RenderMode mode) { this->renderMode = mode; }
