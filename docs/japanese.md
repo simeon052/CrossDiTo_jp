@@ -36,7 +36,8 @@ https://github.com/zrn-ns/crosspoint-jp/releases/download/sd-fonts/fonts.json
 ```
 
 - BIZ UDGothic / BIZ UD明朝 / NotoSansJP / NotoSerifJP を収録
-- `.cpfont` のフォーマット版は双方 `CPFONT_VERSION = 4` で一致
+- 配布されている `.cpfont` は **v5**（縦書き用の vert セクションを持つ）。
+  CrossDiTo の読み込みは v4 固定だったので、v4–v5 を受け付けるようにした（後述）
 - 8 / 10 / 12 / 14 / 16 / 18 pt を収録。**8/10/12pt** は UI の CJK フォールバックが
   要求するサイズ（`src/SdCardFontSystem.cpp` の `kUiFontSizes`）なので、これが
   無いとメニューの日本語が豆腐になる
