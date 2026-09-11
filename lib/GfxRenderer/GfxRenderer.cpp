@@ -399,7 +399,7 @@ void GfxRenderer::ensureFallbackGlyphsLoaded(const int fallbackFontId, const cha
 
   const uint8_t styleIdx = static_cast<uint8_t>(style) & 0x03;
   uint32_t hash = 2166136261U ^ styleIdx;
-  for (const char* p = text; *p != ' '; ++p) {
+  for (const char* p = text; *p != '\0'; ++p) {
     hash ^= static_cast<uint8_t>(*p);
     hash *= 16777619U;
   }
@@ -3281,7 +3281,7 @@ int GfxRenderer::getTextAdvanceVertical(const int fontId, const char* text, cons
 }
 
 int GfxRenderer::getVerticalCellWidth(const int fontId, const char* text, const EpdFontFamily::Style style) const {
-  if (text == nullptr || *text == ' ') return 0;
+  if (text == nullptr || *text == '\0') return 0;
   const auto* p = reinterpret_cast<const uint8_t*>(text);
   const uint32_t cp = utf8NextCodepoint(&p);
   if (cp == 0) return 0;

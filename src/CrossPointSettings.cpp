@@ -815,7 +815,11 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
   spec.hyphenationEnabled = hyphenationEnabled != 0;
   spec.embeddedStyle = embeddedStyle != 0;
   spec.imageRendering = imageRendering;
-  spec.bionicReadingEnabled = bionicReadingEnabled != 0;
+  // バイオニックは語を2つに割って測り、その合計で語の位置を決める
+  // （measureTokenWidth）。縦組みでは欧文を寝かせて描くので、割って測った幅と
+  // 実際に描かれる並びが合わず、語の位置がずれる（ESP32-S3 が崩れた）。
+  // 組版と描画で判断が食い違わないよう、ここで一括して落とす。
+  spec.bionicReadingEnabled = bionicReadingEnabled != 0 && writingMode != WM_VERTICAL;
   spec.guideReadingEnabled = guideReadingEnabled != 0;
   spec.wordSpacing = wordSpacing;
   spec.renderMode = renderMode;

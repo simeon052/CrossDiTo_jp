@@ -379,7 +379,9 @@ ReaderRenderSpec readerRenderSpecForProfile(const int fontId, const uint16_t vie
   }
   spec.fontId = fontId;
   spec.embeddedStyle = profile.embeddedStyle;
-  spec.bionicReadingEnabled = profile.bionicReadingEnabled;
+  // プロファイルの値で上書きするので、縦組みの除外をここでも掛ける。
+  // 理由は CrossPointSettings::readerRenderSpec() のコメントを参照。
+  spec.bionicReadingEnabled = profile.bionicReadingEnabled && !spec.verticalWriting;
   spec.guideReadingEnabled = profile.guideReadingEnabled;
   return spec;
 }
