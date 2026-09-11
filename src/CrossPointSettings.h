@@ -420,7 +420,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t lineSpacing = NORMAL;  // migration only; new saves use lineHeightPercent
   uint8_t lineHeightPercent = 100;
   uint8_t wordSpacing = 0;
-  // 組み方向。AUTO は書籍の writing-mode に従い、無指定なら横組みになる。
+  // 組み方向。利用者が選んだ値だけで決まる。書籍の writing-mode は見ていない。
   uint8_t writingMode = WM_HORIZONTAL;
   // 縦組みの字間（em に対する%、0-30）。横組みには影響しない。
   uint8_t verticalCharSpacing = 0;

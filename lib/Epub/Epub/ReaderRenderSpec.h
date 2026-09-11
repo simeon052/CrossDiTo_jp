@@ -27,8 +27,8 @@ struct ReaderRenderSpec {
   bool guideReadingEnabled = false;
   uint8_t wordSpacing = 0;
   EpubRenderMode renderMode = EpubRenderMode::CrossInkDefault;
-  // 縦組み（vertical-rl）で組むか。設定が「自動」のときは書籍側の
-  // writing-mode で決まるので、同じ設定でも本によって値が変わる。
+  // 縦組み（vertical-rl）で組むか。利用者の設定だけで決まり、書籍側の
+  // writing-mode は見ていない（CrossPointSettings::WRITING_MODE に「自動」は無い）。
   // セクションキャッシュはこの値も含めて検証されるので、縦横を切り替えると
   // キャッシュは作り直しになる。
   bool verticalWriting = false;

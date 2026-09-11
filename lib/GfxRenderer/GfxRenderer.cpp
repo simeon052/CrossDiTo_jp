@@ -3270,7 +3270,7 @@ void forEachSidewaysChunk(const char* begin, const char* end, Fn&& fn) {
     if (lastFit == chunkStart) break;  // 1文字も入らない（壊れた列）。空回りを避ける
     const size_t length = static_cast<size_t>(lastFit - chunkStart);
     memcpy(buf, chunkStart, length);
-    buf[length] = ' ';
+    buf[length] = '\0';
     fn(static_cast<const char*>(buf));
     p = lastFit;
   }

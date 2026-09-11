@@ -110,7 +110,7 @@ CrossDiTo（＝CrossPoint 1.5 系）には既に CJK まわりの土台がある
 - `SdCardFont` — `.cpfont v5` の vert セクション読み込み（遅延ロード）
 - `GfxRenderer::drawTextVertical()` / `getTextAdvanceVertical()`
 
-### 2b: 設定とレンダースペック（実装済み・UIは未公開）
+### 2b: 設定とレンダースペック（実装済み）
 
 - `CrossPointSettings::writingMode`（横書き/縦書き）と `verticalCharSpacing`
 - `ReaderRenderSpec::verticalWriting` / `verticalCharSpacing` を追加し、
@@ -120,7 +120,8 @@ CrossDiTo（＝CrossPoint 1.5 系）には既に CJK まわりの土台がある
   1つも書き換えずに、既存の行分割（禁則込み）をそのまま列割りに流用できる
 - `TextBlock::render()` — 縦組みでは `wordXpos()` を「列内の位置」として y に足す
 
-設定項目はまだ設定画面に出していない。2c が無いと選んでも何も起きないため。
+設定項目（設定 → 読書 → 組み方向 / 縦書きの字間）は 2c と同時に公開した。
+2b の時点では出していなかった。組版への配線が無いと、選んでも何も起きないため。
 
 ### 2c: 段組みの流し込み（実装済み・未検証）
 

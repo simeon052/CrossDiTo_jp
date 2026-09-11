@@ -277,7 +277,7 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
         int lineLength = renderer.getTextAdvanceX(fontId, word, currentStyle);
         int lineStartY = wordY;
         if (hasSyntheticIndentPrefix(word, wordLen)) {
-          const int prefixLength = renderer.getTextAdvanceX(fontId, "â", currentStyle);
+          const int prefixLength = renderer.getTextAdvanceX(fontId, "\xe2\x80\x83", currentStyle);
           lineStartY = wordY + prefixLength;
           lineLength = renderer.getTextAdvanceX(fontId, word + 3, currentStyle);
         }
