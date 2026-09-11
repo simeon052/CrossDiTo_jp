@@ -140,6 +140,13 @@ class GfxRenderer {
   // 1文字ぶんのセルの大きさ。横組みの測定をそのまま使う（SDフォントの
   // 字形が未ロードでも正しい送りが取れる経路）。
   int verticalCharCellSize(int fontId, uint32_t cp, EpdFontFamily::Style style) const;
+  // 縦用字形を持つSDフォントなら返す（この場で読み込む）。持たなければ nullptr。
+  SdCardFont* vertCapableSdFont(int resolvedFontId, EpdFontFamily::Style style) const;
+  // 縦組みで「1文字ぶんのセル」として扱うか。正立する字に加えて、縦用字形を
+  // 実際に持っている字（ダッシュ・三点リーダなど）もセルとして扱う。字形が
+  // 無ければ寝かせたほうが縦線として見えるので、持っているかで決める。
+  // 測定と描画で判断が食い違うと位置がずれるので、両方からこれを呼ぶ。
+  static bool verticalTakesOwnCell(uint32_t cp, SdCardFont* sdFont, EpdFontFamily::Style style);
   // 縦組みの字間（em に対する%）。既定は 0 で、横組みの挙動には影響しない。
   uint8_t verticalCharSpacingPercent_ = 0;
   // VerticalTextScope が出し入れする。const メソッドである測定・描画から

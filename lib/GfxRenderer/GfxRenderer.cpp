@@ -3240,6 +3240,59 @@ int GfxRenderer::verticalCharCellSize(const int fontId, const uint32_t cp, const
   return getTextAdvanceX(fontId, buf, style);
 }
 
+namespace {
+
+// 寝かせる区間を、スタックに載る大きさに切って渡す。
+//
+// もとは区間ごとに std::string を作っていた。縦書きで描くたび・測るたびに
+// ヒープを触ることになり、この機の方針（描画経路で std::string を使わない）に
+// 反する。区間は欧文がほとんどで実測では十数バイトに収まるので、64バイトの
+// スタック領域で足りる。収まらない場合は切って続きを処理する。切れ目をまたぐ
+// カーニングは失うが、区間の境目では元から失っている。
+template <typename Fn>
+void forEachSidewaysChunk(const char* begin, const char* end, Fn&& fn) {
+  char buf[64];
+  const char* p = begin;
+  while (p < end) {
+    const char* chunkStart = p;
+    const char* lastFit = p;
+    while (p < end) {
+      const char* charStart = p;
+      const auto* cursor = reinterpret_cast<const uint8_t*>(p);
+      if (utf8NextCodepoint(&cursor) == 0) break;
+      p = reinterpret_cast<const char*>(cursor);
+      if (static_cast<size_t>(p - chunkStart) >= sizeof(buf)) {
+        p = charStart;
+        break;
+      }
+      lastFit = p;
+    }
+    if (lastFit == chunkStart) break;  // 1文字も入らない（壊れた列）。空回りを避ける
+    const size_t length = static_cast<size_t>(lastFit - chunkStart);
+    memcpy(buf, chunkStart, length);
+    buf[length] = ' ';
+    fn(static_cast<const char*>(buf));
+    p = lastFit;
+  }
+}
+
+}  // namespace
+
+SdCardFont* GfxRenderer::vertCapableSdFont(const int resolvedFontId, const EpdFontFamily::Style style) const {
+  const auto it = sdCardFonts_.find(resolvedFontId);
+  if (it == sdCardFonts_.end() || !it->second || !it->second->hasVertData()) return nullptr;
+  it->second->loadVertData(static_cast<uint8_t>(style));
+  return it->second;
+}
+
+bool GfxRenderer::verticalTakesOwnCell(const uint32_t cp, SdCardFont* sdFont, const EpdFontFamily::Style style) {
+  if (VerticalTextUtils::isUprightInVertical(cp)) return true;
+  // ダッシュや三点リーダは、縦用字形があればそれを使う（縦棒・縦の点になる）。
+  // 無ければ寝かせたほうが縦線として見えるので、字形の有無で決める。
+  if (!sdFont || !VerticalTextUtils::shouldUseVertGlyph(cp)) return false;
+  return sdFont->getVertGlyph(cp, static_cast<uint8_t>(style)) != nullptr;
+}
+
 // 縦組みの文字列の高さ（列方向の長さ）。送りは verticalCharCellSize 経由で
 // 取るので、字形が未ロードでも正しい。
 int GfxRenderer::getTextAdvanceVertical(const int fontId, const char* text, const EpdFontFamily::Style style) const {
@@ -3249,6 +3302,7 @@ int GfxRenderer::getTextAdvanceVertical(const int fontId, const char* text, cons
   const auto fontIt = fontMap.find(resolvedFontId);
   if (fontIt == fontMap.end()) return 0;
   const auto& font = fontIt->second;
+  SdCardFont* sdFont = vertCapableSdFont(resolvedFontId, style);
 
   int total = 0;
   const char* p = text;
@@ -3258,7 +3312,7 @@ int GfxRenderer::getTextAdvanceVertical(const int fontId, const char* text, cons
     const char* charStart = p;
     cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&p));
     const bool end = (cp == 0);
-    const bool upright = !end && VerticalTextUtils::isUprightInVertical(cp);
+    const bool upright = !end && verticalTakesOwnCell(cp, sdFont, style);
 
     if (!end && !upright) {
       if (!sidewaysStart) sidewaysStart = charStart;
@@ -3268,9 +3322,9 @@ int GfxRenderer::getTextAdvanceVertical(const int fontId, const char* text, cons
     // getTextAdvanceX() は縦組みモード中この関数に転送されるので、
     // 横組みとして測るためにモードを外して呼ぶ（外さないと無限再帰）。
     if (sidewaysStart) {
-      const std::string run(sidewaysStart, static_cast<size_t>(charStart - sidewaysStart));
       const VerticalTextScope horizontal(*this, false);
-      total += getTextAdvanceX(resolvedFontId, run.c_str(), style);
+      forEachSidewaysChunk(sidewaysStart, charStart,
+                           [&](const char* chunk) { total += getTextAdvanceX(resolvedFontId, chunk, style); });
       sidewaysStart = nullptr;
     }
     if (end) break;
@@ -3310,12 +3364,7 @@ void GfxRenderer::drawTextVertical(const int fontId, const int x, const int y, c
   const int ascender = fontData->ascender;
 
   // vert 字形を持つSDフォントなら、この場で読み込む（読み込み済みなら何もしない）。
-  SdCardFont* sdFont = nullptr;
-  const auto sdIt = sdCardFonts_.find(resolvedFontId);
-  if (sdIt != sdCardFonts_.end() && sdIt->second && sdIt->second->hasVertData()) {
-    sdFont = sdIt->second;
-    sdFont->loadVertData(static_cast<uint8_t>(style));
-  }
+  SdCardFont* sdFont = vertCapableSdFont(resolvedFontId, style);
 
   int yPos = y;
   const char* p = text;
@@ -3324,7 +3373,7 @@ void GfxRenderer::drawTextVertical(const int fontId, const int x, const int y, c
     const char* charStart = p;
     const uint32_t cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&p));
     const bool end = (cp == 0);
-    const bool upright = !end && VerticalTextUtils::isUprightInVertical(cp);
+    const bool upright = !end && verticalTakesOwnCell(cp, sdFont, style);
 
     if (!end && !upright) {
       if (!sidewaysStart) sidewaysStart = charStart;
@@ -3336,14 +3385,15 @@ void GfxRenderer::drawTextVertical(const int fontId, const int x, const int y, c
       // 区間の長さぶん下から描き始めて結果的に上から下へ並ぶようにする。
       // 幅の測定は横組みとして行う（縦組みモードのままだと getTextAdvanceX が
       // この関数へ転送されて無限再帰になる）。
-      const std::string run(sidewaysStart, static_cast<size_t>(charStart - sidewaysStart));
-      int runWidth = 0;
-      {
-        const VerticalTextScope horizontal(*this, false);
-        runWidth = getTextAdvanceX(resolvedFontId, run.c_str(), style);
-      }
-      drawTextRotated90CW(resolvedFontId, x, yPos + runWidth, run.c_str(), black, style);
-      yPos += runWidth;
+      forEachSidewaysChunk(sidewaysStart, charStart, [&](const char* chunk) {
+        int chunkWidth = 0;
+        {
+          const VerticalTextScope horizontal(*this, false);
+          chunkWidth = getTextAdvanceX(resolvedFontId, chunk, style);
+        }
+        drawTextRotated90CW(resolvedFontId, x, yPos + chunkWidth, chunk, black, style);
+        yPos += chunkWidth;
+      });
       sidewaysStart = nullptr;
     }
     if (end) break;
