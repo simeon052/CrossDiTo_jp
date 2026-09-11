@@ -224,6 +224,8 @@ const int rubyY = y + wordXpos(i) + (groupLength - rubyLength) / 2;  // 親文�
 線の長さは `getTextAdvanceX()` から取る。縦組みモードではこれが列方向の送りを
 返す。`getTextWidth()` は縦組みモードでも横組みの幅を返すので、ここでは使えない。
 
+![傍線が列の左、打ち消し線が列の中央に引かれている](./images/japanese/vertical-decorations.png)
+
 背景反転は縦組みでも出ないが、これは横組みでも同じ。実文字への
 `background-color` はもともと描かれず、空白のみのトークンにしか矩形を塗らない。
 

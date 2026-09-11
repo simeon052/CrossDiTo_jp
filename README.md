@@ -31,13 +31,13 @@ See [docs/japanese.md](./docs/japanese.md) for the implementation notes.
 
 ### 画面
 
-| 縦組みの本文 | ルビ（振り仮名） | 日本語UI（リーダーメニュー） | 日本語UI（設定） |
+| 縦組みの本文 | ルビ（振り仮名） | 傍線と打ち消し線 | 日本語UI |
 |---|---|---|---|
-| ![縦組みで表示された日本語の本文](./docs/images/japanese/vertical-reader.png) | ![ルビが親文字の右に半分の大きさで振られている](./docs/images/japanese/vertical-ruby.png) | ![リーダーメニューが日本語で表示されている](./docs/images/japanese/ui-reader-menu.png) | ![設定画面が日本語で表示されている](./docs/images/japanese/ui-settings.png) |
+| ![縦組みで表示された日本語の本文](./docs/images/japanese/vertical-reader.png) | ![ルビが親文字の右に半分の大きさで振られている](./docs/images/japanese/vertical-ruby.png) | ![傍線が列の左、打ち消し線が列の中央に引かれている](./docs/images/japanese/vertical-decorations.png) | ![設定画面が日本語で表示されている](./docs/images/japanese/ui-settings.png) |
 
 列は右から左、字は上から下。かぎ括弧と句読点は縦用の字形に置き換わり、`CrossDiTo` や
 `ESP32-S3` は90°回して流れる。折り返しの行頭に句読点や閉じ括弧は来ない。
-ルビは親文字の右に、半分の大きさで振る。
+ルビは親文字の右に、半分の大きさで振る。傍線は列の左、打ち消し線は列の中央を通る。
 
 行間（既存の設定）はそのまま列の間隔になる。左が 80%、右が 200%。
 
