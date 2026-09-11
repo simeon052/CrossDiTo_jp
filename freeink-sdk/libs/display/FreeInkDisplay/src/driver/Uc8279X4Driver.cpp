@@ -65,8 +65,12 @@ const GrayLut* selectAaLuts() {
 
 const Uc8279X4Config& uc8279X4DefaultConfig() {
   static const Uc8279X4Config cfg = {
-      0x37,  // psr0: REG=1 (external LUT) as written at init and for AA;
-             // built-in refreshes re-assert psr0 & 0xDF = 0x17 (OTP)
+      // psr0: REG=1 (external LUT) as written at init and for AA;
+      // built-in refreshes re-assert psr0 & 0xDF = 0x13 (OTP)。
+      // bit2 = SHL（ソース走査方向）。実機で 0x37（SHL=1）だと画面が左右の
+      // 鏡像になったので 0 に落とす。ボードの orientation は SSD1677 ドライバ
+      // 専用の経路なので、この変種では効かない。
+      0x33,
       0x4D,  // psr1
       0x20,  // pfs (0x03)
       0x0E,  // pll (0x30) — programmed at init on this variant
