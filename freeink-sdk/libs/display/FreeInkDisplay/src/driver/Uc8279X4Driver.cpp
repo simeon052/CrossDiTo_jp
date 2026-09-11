@@ -65,12 +65,8 @@ const GrayLut* selectAaLuts() {
 
 const Uc8279X4Config& uc8279X4DefaultConfig() {
   static const Uc8279X4Config cfg = {
-      // psr0: REG=1 (external LUT) as written at init and for AA;
-      // built-in refreshes re-assert psr0 & 0xDF = 0x13 (OTP)。
-      // bit2 = SHL（ソース走査方向）。実機で 0x37（SHL=1）だと画面が左右の
-      // 鏡像になったので 0 に落とす。ボードの orientation は SSD1677 ドライバ
-      // 専用の経路なので、この変種では効かない。
-      0x33,
+      0x37,  // psr0: REG=1 (external LUT) as written at init and for AA;
+             // built-in refreshes re-assert psr0 & 0xDF = 0x17 (OTP)
       0x4D,  // psr1
       0x20,  // pfs (0x03)
       0x0E,  // pll (0x30) — programmed at init on this variant
@@ -151,10 +147,12 @@ void Uc8279X4Driver::streamPlane(EpdBus& bus, uint8_t ramCmd, const uint8_t* fb,
   // Gates before the visible window (the 120-gate offset): white.
   memset(row, 0xFF, wb);
   for (uint16_t y = 0; y < _cfg.gateOffset; y++) bus.data(row, wb);
-  // Visible rows, mirror-Y via row reversal (mirror-X is the PSR SHL bit —
-  // same orientation convention as the UC8179 sibling). AA planes are sent
-  // bitwise-inverted per the vendor reference.
-  for (uint16_t y = _h; y-- > 0;) {
+  // Visible rows. AA planes are sent bitwise-inverted per the vendor reference.
+  //
+  // 元は行を逆順に送っていた（mirror-Y）。実機（UC8279 LUT_VER=68）では、
+  // それだと上下が反転する。SHL=1 のまま行を順方向で送ると正しい向きになる。
+  // mirror-X は PSR の SHL ビット（UC8179 兄弟機と同じ約束）。
+  for (uint16_t y = 0; y < _h; y++) {
     const uint8_t* src = fb + static_cast<uint32_t>(y) * _wb;
     if (invert) {
       for (uint16_t i = 0; i < wb; i++) row[i] = static_cast<uint8_t>(~src[i]);
@@ -180,7 +178,9 @@ bool Uc8279X4Driver::displayStart(EpdBus& bus, const uint8_t* fb, const uint8_t*
   // Same differential model as the UC8179 sibling: full OTP flash on an explicit
   // Full request or the forced first clear, otherwise a PTIN/PTOUT partial whose
   // OLD plane (0x10) holds the previous displayed frame (synced in displayFinish).
-  const bool fast = (mode != RefreshMode::Full) && !_needFullClear && _oldPlaneValid;
+  // 調査用: 高速更新を止めて必ず全面更新にする。実機で起動画面のあと画面が
+  // 変わらない件を切り分けるため。原因が判ったら戻す。
+  const bool fast = false && (mode != RefreshMode::Full) && !_needFullClear && _oldPlaneValid;
 
   streamPlane(bus, CMD_DTM2, fb);
   if (!fast) {
