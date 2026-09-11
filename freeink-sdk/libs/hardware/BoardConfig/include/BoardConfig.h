@@ -1443,7 +1443,10 @@ constexpr BoardProfile XTEINK_X4_PRO = {
     {8, 10000, 10, true, 9},
     NO_AUDIO,
     NO_LEDS,
-    NO_FLIP,  // panel mount transform pending hardware; native SSD1677 scan is 800x480 landscape
+    // 実機で確認: NO_FLIP では画面が左右の鏡像（鏡文字）になる。パネルの実装向きが
+    // ネイティブ走査と逆なので、X だけ反転させる。SDK はこの値を「実機待ち」として
+    // NO_FLIP のまま出荷していた（上の PENDING hardware validation を参照）。
+    MIRROR_X,  // 実機で確認した実装向き。ネイティブ走査は 800x480 landscape
     // SD is native SDMMC, NOT SPI: the card the OEM reads is silent to SPI-mode CMD0.
     // CONFIRMED on hardware: 1-bit, slot 1, CLK=41 CMD=42 DAT0=40, internal pull-ups, 40 MHz.
     // D1/D2/D3 are UNUSED in 1-bit. Mounts reliably via SdmmcBlockDevice, which power-cycles
