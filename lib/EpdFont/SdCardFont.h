@@ -31,6 +31,10 @@
 class SdCardFont {
  public:
   static constexpr uint16_t MAX_PAGE_GLYPHS = 512;
+  // vert セクションの上限。実測では NotoSansJP / BIZ UDGothic とも 60 件程度で、
+  // 縦書き代替字形は本来ごく少数しかない。壊れたファイルや細工されたファイルが
+  // 巨大な件数を要求してきたときに、確保を試みる前に弾くための歯止め。
+  static constexpr uint16_t MAX_VERT_GLYPHS = 512;
   static constexpr uint8_t MAX_STYLES = 4;
 
   SdCardFont() = default;
@@ -190,6 +194,7 @@ class SdCardFont {
     uint32_t* vertCodepoints = nullptr;  // 昇順。二分探索する
     EpdGlyph* vertGlyphs = nullptr;      // vertCodepoints と同じ並び
     uint8_t* vertBitmap = nullptr;       // 全 vert 字形のビットマップを連結したもの
+    uint32_t vertBitmapSize = 0;         // vertBitmap の確保量。getVertBitmap() の境界検査に使う
 
     // Full intervals loaded from file (kept in RAM for codepoint lookup)
     EpdUnicodeInterval* fullIntervals = nullptr;

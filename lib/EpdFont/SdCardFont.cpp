@@ -204,6 +204,7 @@ void SdCardFont::freeStyleAll(PerStyle& s) {
   s.vertGlyphs = nullptr;
   delete[] s.vertBitmap;
   s.vertBitmap = nullptr;
+  s.vertBitmapSize = 0;
   s.vertCount = 0;
   s.vertLoaded = false;
   s.present = false;
@@ -1583,6 +1584,14 @@ bool SdCardFont::loadVertData(const uint8_t style) {
     s.vertLoaded = true;  // セクションはあるが空。再読み込みしない
     return true;
   }
+  if (count > MAX_VERT_GLYPHS) {
+    // ファイルの言い値をそのまま確保量にしない。縦書き代替字形は本来ごく少数で、
+    // これを超える値は壊れたファイルか細工されたファイルとみなす。
+    LOG_ERR("SDCF", "Vert count %u exceeds cap %u for style %u - ignoring section", count,
+            static_cast<unsigned>(MAX_VERT_GLYPHS), style);
+    s.vertLoaded = true;  // 読み直しても同じなので、毎回SDを叩かないよう閉じる
+    return false;
+  }
 
   // 1件20バイト。実測で NotoSansJP / BIZ UDGothic とも 60 件程度なので、
   // まとめて読んでから展開する（1.2KB 程度の一時バッファ）。
@@ -1606,12 +1615,20 @@ bool SdCardFont::loadVertData(const uint8_t style) {
     return false;
   }
 
+  // 確保量は dataLength の合計ではなく dataOffset+dataLength の最大で取る。
+  // getVertBitmap() は dataOffset で索くので、書き手が連続しない配置を出した場合や
+  // ファイルが壊れている場合、合計で確保すると足りずに範囲外を読む。
   uint32_t totalBitmapSize = 0;
   for (uint16_t i = 0; i < count; i++) {
     const uint8_t* p = entryBuf.get() + i * VERT_ENTRY_SIZE;
     codepoints[i] = readU32(p);
     memcpy(&glyphs[i], p + 4, sizeof(EpdGlyph));
-    totalBitmapSize += glyphs[i].dataLength;
+    const uint32_t end = glyphs[i].dataOffset + glyphs[i].dataLength;
+    if (end < glyphs[i].dataOffset) {  // 加算が一周した＝壊れている
+      LOG_ERR("SDCF", "Vert glyph %u has overflowing bitmap range for style %u", i, style);
+      return false;
+    }
+    if (end > totalBitmapSize) totalBitmapSize = end;
   }
   entryBuf.reset();
 
@@ -1633,6 +1650,7 @@ bool SdCardFont::loadVertData(const uint8_t style) {
   s.vertCodepoints = codepoints.release();
   s.vertGlyphs = glyphs.release();
   s.vertBitmap = bitmap.release();
+  s.vertBitmapSize = totalBitmapSize;
   s.vertCount = count;
   s.vertLoaded = true;
   LOG_DBG("SDCF", "Loaded %u vert glyphs (%u bytes) for style %u", count, totalBitmapSize, style);
@@ -1660,7 +1678,12 @@ const EpdGlyph* SdCardFont::getVertGlyph(const uint32_t codepoint, const uint8_t
 
 const uint8_t* SdCardFont::getVertBitmap(const EpdGlyph* vertGlyph, const uint8_t style) const {
   if (!vertGlyph || style >= MAX_STYLES || !styles_[style].vertBitmap) return nullptr;
-  return styles_[style].vertBitmap + vertGlyph->dataOffset;
+  const auto& s = styles_[style];
+  // 索く前に範囲を見る。確保は dataOffset+dataLength の最大で取ってあるが、
+  // 別のスタイルの字形を渡された場合など、ここに合わない値が来る余地は残る。
+  const uint32_t end = vertGlyph->dataOffset + vertGlyph->dataLength;
+  if (end < vertGlyph->dataOffset || end > s.vertBitmapSize) return nullptr;
+  return s.vertBitmap + vertGlyph->dataOffset;
 }
 
 // --- Public accessors ---
