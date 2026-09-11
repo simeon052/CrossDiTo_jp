@@ -389,9 +389,14 @@ class SimulatorSmokeTest {
       const int height = renderer.getScreenHeight();
       if (width <= 0 || height <= 0) fail("Touch smoke test has invalid screen dimensions");
       LOG_INF("SMOKE", "Running touch reader input script with %d page turn(s)", turns);
+      // 縦組みの本は右綴じで、進む側のタップ位置が左右入れ替わる
+      // （ReaderUtils::detectTouchPageTurn）。テストも同じ向きを叩かないと、
+      // 「次へ」のつもりで1ページ目に張りついたまま何も確かめられない。
+      const bool rightToLeft = SETTINGS.writingMode == CrossPointSettings::WM_VERTICAL;
+      const int forwardX = rightToLeft ? width / 6 : width * 5 / 6;
       for (int i = 0; i < turns; ++i) {
-        inputScript.push_back(touchDown(width * 5 / 6, height / 2));
-        inputScript.push_back(touchRelease(width * 5 / 6, height / 2));
+        inputScript.push_back(touchDown(forwardX, height / 2));
+        inputScript.push_back(touchRelease(forwardX, height / 2));
         inputScript.push_back(render("Reader after touch page forward", 4));
       }
       if (mappedInputManager.hasHomeKey()) {

@@ -1,0 +1,4 @@
+# パッチは改行を変換してはいけない。Windows のチェックアウトで CRLF になると
+# ビルド前スクリプト（scripts/patch_jpegdec.py）の `git apply` が
+# 「patch does not apply」で落ち、ビルドが始まらない。
+*.patch -text

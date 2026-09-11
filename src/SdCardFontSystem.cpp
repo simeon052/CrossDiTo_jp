@@ -236,14 +236,26 @@ void SdCardFontSystem::releaseForNetwork(GfxRenderer& renderer) {
 }
 
 void SdCardFontSystem::setupUiFallbacks(GfxRenderer& renderer) {
+  // ここが素通りすると、UIの日本語・中国語・韓国語が全部豆腐になる。
+  // 黙って return すると原因が追えないので、どの条件で降りたかを残す。
   const std::string& familyName = manager_.currentFamilyName();
-  if (familyName.empty()) return;
+  if (familyName.empty()) {
+    LOG_DBG("SDFS", "UI fallback skipped: no current SD family");
+    return;
+  }
 
   const auto* family = registry_.findFamily(familyName);
-  if (!family) return;
+  if (!family) {
+    LOG_DBG("SDFS", "UI fallback skipped: %s not in registry", familyName.c_str());
+    return;
+  }
 
-  const auto readerIt = renderer.getFontMap().find(manager_.getFontId(familyName));
-  if (readerIt == renderer.getFontMap().end()) return;
+  const int readerFontId = manager_.getFontId(familyName);
+  const auto readerIt = renderer.getFontMap().find(readerFontId);
+  if (readerIt == renderer.getFontMap().end()) {
+    LOG_DBG("SDFS", "UI fallback skipped: reader font id %d for %s not registered", readerFontId, familyName.c_str());
+    return;
+  }
 
   static constexpr uint32_t kCjkProbes[] = {0x4E00, 0x3042, 0x30A2, 0xAC00};
   bool hasCjk = false;

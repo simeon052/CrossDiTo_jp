@@ -317,6 +317,12 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Annotation underline visibility
   enum ANNOTATION_VISIBILITY : uint8_t { ANNOT_VISIBLE = 0, ANNOT_HIDDEN = 1, ANNOTATION_VISIBILITY_COUNT };
 
+  // 組み方向。いまは利用者が選ぶだけで、書籍側の指定は見ていない。
+  // 「自動」を足すなら、OPF spine の page-progression-direction="rtl" を
+  // ContentOpfParser で拾って BookMetadataCache に持たせるのが素直だが、
+  // キャッシュのフォーマット変更（＝全書籍のメタデータ再生成）を伴う。
+  enum WRITING_MODE : uint8_t { WM_HORIZONTAL = 0, WM_VERTICAL = 1, WRITING_MODE_COUNT };
+
   enum QUICK_RESUME_SLEEP_SCREEN {
     QUICK_RESUME_NEVER = 0,
     QUICK_RESUME_AFTER_TIMEOUT = 1,
@@ -414,6 +420,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t lineSpacing = NORMAL;  // migration only; new saves use lineHeightPercent
   uint8_t lineHeightPercent = 100;
   uint8_t wordSpacing = 0;
+  // 組み方向。利用者が選んだ値だけで決まる。書籍の writing-mode は見ていない。
+  uint8_t writingMode = WM_HORIZONTAL;
+  // 縦組みの字間（em に対する%、0-30）。横組みには影響しない。
+  uint8_t verticalCharSpacing = 0;
   uint8_t paragraphAlignment = JUSTIFIED;
   // Auto-sleep timeout setting (default 10 minutes). Legacy sleepTimeout enum values are migration-only.
   uint8_t sleepTimeoutMinutes = 10;

@@ -27,6 +27,13 @@ struct ReaderRenderSpec {
   bool guideReadingEnabled = false;
   uint8_t wordSpacing = 0;
   EpubRenderMode renderMode = EpubRenderMode::CrossInkDefault;
+  // 縦組み（vertical-rl）で組むか。利用者の設定だけで決まり、書籍側の
+  // writing-mode は見ていない（CrossPointSettings::WRITING_MODE に「自動」は無い）。
+  // セクションキャッシュはこの値も含めて検証されるので、縦横を切り替えると
+  // キャッシュは作り直しになる。
+  bool verticalWriting = false;
+  // 縦組みの字間（em に対する%）。横組みでは使わない。
+  uint8_t verticalCharSpacing = 0;
 };
 
 inline uint32_t readerRenderSpecSignature(const ReaderRenderSpec& spec) {
@@ -49,5 +56,7 @@ inline uint32_t readerRenderSpecSignature(const ReaderRenderSpec& spec) {
   mix(spec.guideReadingEnabled);
   mix(spec.wordSpacing);
   mix(static_cast<uint8_t>(spec.renderMode));
+  mix(spec.verticalWriting);
+  mix(spec.verticalCharSpacing);
   return signature == 0 ? 1 : signature;
 }

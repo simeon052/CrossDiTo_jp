@@ -105,12 +105,18 @@ inline TouchPageTurn detectTouchPageTurn(const GfxRenderer& renderer, const Mapp
     return result;
   }
 
+  // 縦組みの本は右綴じで、読み進む向きが右から左になる。指の動きも紙と
+  // 同じ向きに合わせないと、めくるたびに戻ってしまう。物理ボタンは
+  // 「次へ」が次のままなので、画面を触る操作だけを裏返す。
+  const bool rightToLeft = SETTINGS.writingMode == CrossPointSettings::WM_VERTICAL;
+
   const auto swipe = input.wasSwipe();
   if (swipe != MappedInputManager::SwipeDir::None) {
     // A horizontal reader swipe turns pages wherever it starts. Edge-only
     // navigation remains handled by the activities that explicitly use it.
-    result.prev = swipe == MappedInputManager::SwipeDir::Right;
-    result.next = swipe == MappedInputManager::SwipeDir::Left;
+    const bool swipedRight = swipe == MappedInputManager::SwipeDir::Right;
+    result.prev = rightToLeft ? !swipedRight : swipedRight;
+    result.next = rightToLeft ? swipedRight : !swipedRight;
     return result;
   }
 
@@ -128,9 +134,10 @@ inline TouchPageTurn detectTouchPageTurn(const GfxRenderer& renderer, const Mapp
     return result;
   }
 
+  // 「戻る」は端の1/3。縦組みではその1/3が右端に移る。
   const int previousZoneWidth = width / 3;
-  result.prev = x < previousZoneWidth;
-  result.next = x >= previousZoneWidth;
+  result.prev = rightToLeft ? (x >= width - previousZoneWidth) : (x < previousZoneWidth);
+  result.next = !result.prev;
   result.heldMs = input.getHeldTime();
   return result;
 #endif

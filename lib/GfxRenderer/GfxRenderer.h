@@ -42,6 +42,20 @@ class GfxRenderer {
     LandscapeCounterClockwise  // 800x480 logical coordinates, native panel orientation
   };
 
+  // 縦組みの紙面。組版は「幅＝画面の高さ、高さ＝画面の幅」に入れ替えた紙面で
+  // 横組みとして行い（そうすると既存のレイアウトエンジンをそのまま使える）、
+  // 配置の瞬間にここで画面座標へ戻す。
+  //
+  //   画面x = contentRight − 組版y − columnWidth   （列は右から左へ積む）
+  //   画面y = contentTop   + 組版x                 （字は上から下へ進む）
+  //
+  // columnWidth は1列の幅で、回転した紙面での「行の高さ」と同じ値。
+  struct VerticalPageTransform {
+    int contentRight = 0;
+    int contentTop = 0;
+    int columnWidth = 0;
+  };
+
  private:
   static constexpr size_t BW_BUFFER_CHUNK_SIZE = 8000;  // 8KB chunks to allow for non-contiguous memory
   static constexpr size_t MAX_BW_BUFFER_CHUNKS =
@@ -112,12 +126,33 @@ class GfxRenderer {
   // fontId unchanged. The whole string is routed as a unit so each draw/measure
   // call stays single-font (consistent bit depth, metrics, wrapping).
   int resolveTextFontId(int fontId, const char* text, EpdFontFamily::Style style) const;
+  // 回送先のSDフォントの字形を、描く／測る直前に載せる。UIには本文のような
+  // 走査パスが無いので、ここを通さないと日本語が置換グリフ（◆）で描かれる。
+  void ensureFallbackGlyphsLoaded(int fallbackFontId, const char* text, EpdFontFamily::Style style) const;
+  // 直前に載せた要求。同じものを繰り返し要求されたときにSDを読まないための覚え。
+  // 0 は「まだ何も載せていない」。
+  mutable int lastFallbackPrewarmFontId_ = 0;
+  mutable uint32_t lastFallbackPrewarmHash_ = 0;
   void renderChar(const EpdFontFamily& fontFamily, uint32_t cp, int* x, int* y, bool pixelState,
                   EpdFontFamily::Style style) const;
   // 縦組みで1文字ぶん進む量（字の advance + 字間）。
   int verticalCellAdvance(int advancePx) const;
+  // 1文字ぶんのセルの大きさ。横組みの測定をそのまま使う（SDフォントの
+  // 字形が未ロードでも正しい送りが取れる経路）。
+  int verticalCharCellSize(int fontId, uint32_t cp, EpdFontFamily::Style style) const;
+  // 縦用字形を持つSDフォントなら返す（この場で読み込む）。持たなければ nullptr。
+  SdCardFont* vertCapableSdFont(int resolvedFontId, EpdFontFamily::Style style) const;
+  // 縦組みで「1文字ぶんのセル」として扱うか。正立する字に加えて、縦用字形を
+  // 実際に持っている字（ダッシュ・三点リーダなど）もセルとして扱う。字形が
+  // 無ければ寝かせたほうが縦線として見えるので、持っているかで決める。
+  // 測定と描画で判断が食い違うと位置がずれるので、両方からこれを呼ぶ。
+  static bool verticalTakesOwnCell(uint32_t cp, SdCardFont* sdFont, EpdFontFamily::Style style);
   // 縦組みの字間（em に対する%）。既定は 0 で、横組みの挙動には影響しない。
   uint8_t verticalCharSpacingPercent_ = 0;
+  // VerticalTextScope が出し入れする。const メソッドである測定・描画から
+  // 触るので mutable（fontCacheManager_ と同じ割り切り）。
+  mutable bool verticalTextMode_ = false;
+  mutable VerticalPageTransform verticalPageTransform_{};
   void freeBwBufferChunks();
   void freeBitmapScratchBuffers();
   bool ensureBitmapScratchBuffers(size_t outputRowSize, size_t rowBytesSize) const;
@@ -159,6 +194,7 @@ class GfxRenderer {
   void removeFont(int fontId) {
     fontMap.erase(fontId);
     sdCardFonts_.erase(fontId);
+    if (fontId == lastFallbackPrewarmFontId_) lastFallbackPrewarmFontId_ = 0;
   }
   void setFontCacheManager(FontCacheManager* m) { fontCacheManager_ = m; }
   FontCacheManager* getFontCacheManager() const { return fontCacheManager_; }
@@ -166,13 +202,20 @@ class GfxRenderer {
   const std::map<int, EpdFontFamily>& getFontMap() const { return fontMap; }
   void registerSdCardFont(int fontId, SdCardFont* font) { sdCardFonts_[fontId] = font; }
   void unregisterSdCardFont(int fontId) { removeFont(fontId); }
-  void clearSdCardFonts() { sdCardFonts_.clear(); }
+  void clearSdCardFonts() {
+    sdCardFonts_.clear();
+    lastFallbackPrewarmFontId_ = 0;
+  }
   const std::map<int, SdCardFont*>& getSdCardFonts() const { return sdCardFonts_; }
   bool isSdCardFont(int fontId) const { return sdCardFonts_.count(fontId) > 0; }
   // Register/clear size-matched CJK UI fallbacks (see fallbackFontMap_).
   // setFallbackFont maps a primary UI font id to an SD font id of the same size.
   void setFallbackFont(int primaryFontId, int fallbackFontId) { fallbackFontMap_[primaryFontId] = fallbackFontId; }
-  void clearFallbackFonts() { fallbackFontMap_.clear(); }
+  void clearFallbackFonts() {
+    fallbackFontMap_.clear();
+    lastFallbackPrewarmFontId_ = 0;
+    lastFallbackPrewarmHash_ = 0;
+  }
   // Ensure SD card font glyph data is loaded for the given text. Called from layout code
   // (which holds a const GfxRenderer&) before measuring word widths. Safe to call on non-SD fonts (no-op).
   // styleMask: bitmask of styles to prepare (bit 0=regular, 1=bold, 2=italic, 3=bold-italic).
@@ -314,6 +357,47 @@ class GfxRenderer {
   // 縦組みの字間。em に対する百分率で、0-30 に丸める。
   void setVerticalCharSpacing(const uint8_t percent) { verticalCharSpacingPercent_ = percent > 30 ? 30 : percent; }
   uint8_t getVerticalCharSpacing() const { return verticalCharSpacingPercent_; }
+
+  // 縦組みモード。立っている間だけ getTextAdvanceX() が縦の送りを返すので、
+  // 行分割・字送りの計算（ParsedText の17か所の測定呼び出し）を書き換えずに
+  // 縦組みへ流用できる。UI は横組みのまま描くので、生の setter は用意せず、
+  // 下の VerticalTextScope で「本文の組版・描画」だけを囲む形にしている。
+  bool isVerticalTextMode() const { return verticalTextMode_; }
+
+  const VerticalPageTransform& verticalPageTransform() const { return verticalPageTransform_; }
+
+  // 組版座標 (layoutX, layoutY) を画面座標へ。縦組みでないときは素通し。
+  void mapVerticalLayoutPoint(int layoutX, int layoutY, int& screenX, int& screenY) const;
+  // 縦組みで先頭1文字ぶんの列の太さ。ルビを親文字の右へ逃がす量に使う。
+  // 空文字なら 0。
+  int getVerticalCellWidth(int fontId, const char* text, EpdFontFamily::Style style) const;
+
+  class VerticalTextScope {
+    const GfxRenderer& renderer_;
+    const bool previousMode_;
+    const VerticalPageTransform previousTransform_;
+
+   public:
+    // 紙面を伴わない版（組版の測定だけ縦にしたいとき）。デフォルト引数の
+    // `= {}` は、この時点で VerticalPageTransform が不完全型として扱われる
+    // ため GCC が受け付けない。委譲コンストラクタで代替している。
+    VerticalTextScope(const GfxRenderer& renderer, const bool vertical)
+        : VerticalTextScope(renderer, vertical, VerticalPageTransform()) {}
+
+    VerticalTextScope(const GfxRenderer& renderer, const bool vertical, const VerticalPageTransform& transform)
+        : renderer_(renderer),
+          previousMode_(renderer.verticalTextMode_),
+          previousTransform_(renderer.verticalPageTransform_) {
+      renderer_.verticalTextMode_ = vertical;
+      renderer_.verticalPageTransform_ = transform;
+    }
+    ~VerticalTextScope() {
+      renderer_.verticalTextMode_ = previousMode_;
+      renderer_.verticalPageTransform_ = previousTransform_;
+    }
+    VerticalTextScope(const VerticalTextScope&) = delete;
+    VerticalTextScope& operator=(const VerticalTextScope&) = delete;
+  };
 
   // Grayscale functions
   void setRenderMode(const RenderMode mode) { this->renderMode = mode; }

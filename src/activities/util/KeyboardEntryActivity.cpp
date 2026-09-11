@@ -112,13 +112,22 @@ const fui::KeyboardLayout URL_SHIFT_LAYOUT{URL_SHIFT_ROWS, 5};
 const fui::KeyboardLayout URL_SNIPPET_LAYOUT{URL_SNIP_ROWS, 4};
 
 fui::KeyboardLayoutId layoutForLanguage(const Language language) {
+  // custom_i18n_languages がこれらの言語を外していると Language::FR などは
+  // 存在しない。生成側が出す I18N_HAS_<CODE> で分岐を丸ごと落とす
+  // （未定義のマクロは #if で 0 になる）。
   switch (language) {
+#if I18N_HAS_FR
     case Language::FR:
       return fui::KeyboardLayoutId::AzertyFr;
+#endif
+#if I18N_HAS_DE
     case Language::DE:
       return fui::KeyboardLayoutId::QwertzDe;
+#endif
+#if I18N_HAS_ES
     case Language::ES:
       return fui::KeyboardLayoutId::SpanishEs;
+#endif
     default:
       return fui::KeyboardLayoutId::QwertyEn;
   }

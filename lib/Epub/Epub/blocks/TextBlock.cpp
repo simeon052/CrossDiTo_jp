@@ -217,11 +217,89 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
 
   const bool scanning = renderer.isFontCacheScanning();
   const int ascender = renderer.getFontAscenderSize(fontId);
+  // 縦組みでは wordXpos() は「行内の位置」ではなく「列内の位置」を指す。
+  // 行分割は縦の送りで測って作られているので、そのまま y に足せばよい。
+  const bool vertical = renderer.isVerticalTextMode();
   for (uint16_t i = 0; i < numWords; i++) {
     const char* word = wordText(i);
     const uint16_t wordLen = wordTextLen(i);
     const int wordX = wordXpos(i) + x;
     const EpdFontFamily::Style currentStyle = wordStyle(i);
+
+    if (vertical) {
+      // 縦組みでは組版が「幅と高さを入れ替えた紙面」で行われている。行内の位置は
+      // 列内の位置なので、横組みで x に足していたものはすべて y に足す。横組みで
+      // 字の「上」に取るものは列の右、「下」に引くものは列の左に来る。
+      //
+      // ルビの余白（getRubyShift）は横組みでは行の上に取ってあるので、回転すると
+      // 列の右の余白になる。親文字をその分だけ左へ寄せて空ける。
+      const int baseX = x - getRubyShift(ascender);
+      const int wordY = y + wordXpos(i);
+
+      if ((wordFlags(i) & WORD_FLAG_BACKGROUND_BLACK) != 0 && isWhitespaceOnlyBackgroundToken(word)) {
+        const uint16_t backgroundLength = measureBackgroundWidth(renderer, fontId, word, currentStyle);
+        if (backgroundLength > 0) {
+          renderer.fillRect(baseX, wordY, ascender, backgroundLength, true);
+        }
+      }
+
+      // バイオニックリーディングは縦組みでは効かない。組版が語を2つに割って
+      // 測るのに対し、欧文は寝かせて描くので幅が合わず、語の位置がずれる。
+      // CrossPointSettings::readerRenderSpec() が縦組みのとき落としている。
+      renderer.drawTextVertical(fontId, baseX, wordY, word, foregroundBlack, currentStyle);
+
+      if (i < rubyTexts.size() && !rubyTexts[i].empty() && (currentStyle & EpdFontFamily::RUBY_CONTINUE) == 0) {
+        uint16_t groupWords = 1;
+        while (i + groupWords < numWords && (wordStyle(i + groupWords) & EpdFontFamily::RUBY_CONTINUE) != 0) {
+          ++groupWords;
+        }
+        // 縦組みモードでは getTextAdvanceX() が列方向の送りを返す。
+        int groupLength = 0;
+        for (uint16_t j = 0; j < groupWords; ++j) {
+          groupLength += renderer.getTextAdvanceX(fontId, wordText(i + j), wordStyle(i + j));
+        }
+        const int rubyLength = renderer.getTextAdvanceX(fontId, rubyTexts[i].c_str(), EpdFontFamily::SUP);
+        // 親文字の右端から始める。列の中では親文字の並びの中央に合わせる。
+        const int rubyX = baseX + renderer.getVerticalCellWidth(fontId, word, currentStyle);
+        const int rubyY = wordY + (groupLength - rubyLength) / 2;
+        renderer.drawTextVertical(fontId, rubyX, rubyY, rubyTexts[i].c_str(), foregroundBlack, EpdFontFamily::SUP);
+      }
+
+      const uint16_t verticalDotOffset = guideDotXOffset(i);
+      if (verticalDotOffset > 0) {
+        renderer.drawTextVertical(fontId, baseX, wordY + verticalDotOffset, "\xc2\xb7", foregroundBlack,
+                                  EpdFontFamily::REGULAR);
+      }
+
+      // 線の長さは getTextAdvanceX で取る。縦組みモードでは列方向の送りを返す
+      // （getTextWidth は横組みの幅を返すので、ここでは使えない）。
+      if (!scanning && (currentStyle & (EpdFontFamily::UNDERLINE | EpdFontFamily::STRIKETHROUGH)) != 0) {
+        int lineLength = renderer.getTextAdvanceX(fontId, word, currentStyle);
+        int lineStartY = wordY;
+        if (hasSyntheticIndentPrefix(word, wordLen)) {
+          const int prefixLength = renderer.getTextAdvanceX(fontId, "\xe2\x80\x83", currentStyle);
+          lineStartY = wordY + prefixLength;
+          lineLength = renderer.getTextAdvanceX(fontId, word + 3, currentStyle);
+        }
+        if ((currentStyle & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0) {
+          lineLength = (lineLength + 1) / 2;
+        }
+        const int cellWidth = renderer.getVerticalCellWidth(fontId, word, currentStyle);
+        if ((currentStyle & EpdFontFamily::UNDERLINE) != 0) {
+          // 縦組みの傍線は列の左に引く。横組みで字の下に引く線が、回転した
+          // 紙面ではそのまま左に来る。
+          const int lineX = baseX - 2;
+          renderer.drawLine(lineX, lineStartY, lineX, lineStartY + lineLength, 3, foregroundBlack);
+        }
+        if ((currentStyle & EpdFontFamily::STRIKETHROUGH) != 0) {
+          const int lineX = baseX + cellWidth / 2;
+          renderer.drawLine(lineX, lineStartY, lineX, lineStartY + lineLength, 3, foregroundBlack);
+        }
+      }
+
+      continue;
+    }
+
     const uint8_t boundary = bionicBoundary(i);
     const auto baseDir =
         static_cast<BidiUtils::BidiBaseDir>(BidiUtils::detectParagraphLevel(word, blockStyle.isRtl ? 1 : 0));

@@ -8,6 +8,67 @@
 
 The current hardware-verified build is [CrossDiTo 1.5.1](./docs/releases/v1.5.1.md). Its [changelog](./CHANGELOG.md) contains only CrossDiTo-specific changes; CrossInk's own history remains with the upstream project.
 
+## 日本語対応（このフォーク） / Japanese support
+
+**English:** this fork (`simeon052/CrossDiTo_jp`) adds a Japanese UI, Japanese SD-card fonts,
+and Japanese vertical writing (縦組み, `vertical-rl`) on top of CrossDiTo.
+See [docs/japanese.md](./docs/japanese.md) for the implementation notes.
+
+このフォークは CrossDiTo に**日本語UI**と**縦組み**を足したもの。
+実装の詳細は [docs/japanese.md](./docs/japanese.md) を参照。
+
+### 追加したもの
+
+| 追加 | 内容 |
+|---|---|
+| 日本語UI | 774キー中 765キーを翻訳。設定 → 言語 で「日本語」を選ぶ |
+| 日本語フォント | `.cpfont v5` を受け付けるようにし、BIZ UDGothic / BIZ UD明朝 / NotoSansJP / NotoSerifJP を取得できるようにした |
+| 縦組み | 段組みの流し込み、句読点・かぎ括弧の縦用字形、欧文の90°回転、小書き仮名の変位、ルビ、傍線・打ち消し線・ガイドドット。禁則は既存の処理をそのまま使う |
+| 右綴じ | 縦組みではタップとスワイプのページ送り方向を裏返し、進捗バーを右端から左へ伸ばす |
+| 行間・字間 | 行間（70〜200%）が列の間隔として効く。字間は縦組み用に0〜30%を新設 |
+| 同梱言語の削減 | 英語＋日本語のみを焼く。文字列データが 422,112 B → 37,178 B になり、空いた領域を縦組みに充てた |
+| シミュレータ撮影 | 画面のない環境でも実画面をPNGで撮れるようにした（CIの成果物にもなる） |
+
+### 画面
+
+| 縦組みの本文 | ルビ（振り仮名） | 傍線と打ち消し線 | 日本語UI |
+|---|---|---|---|
+| ![縦組みで表示された日本語の本文](./docs/images/japanese/vertical-reader.png) | ![ルビが親文字の右に半分の大きさで振られている](./docs/images/japanese/vertical-ruby.png) | ![傍線が列の左、打ち消し線が列の中央に引かれている](./docs/images/japanese/vertical-decorations.png) | ![設定画面が日本語で表示されている](./docs/images/japanese/ui-settings.png) |
+
+列は右から左、字は上から下。かぎ括弧と句読点は縦用の字形に置き換わり、`CrossDiTo` や
+`ESP32-S3` は90°回して流れる。折り返しの行頭に句読点や閉じ括弧は来ない。
+ルビは親文字の右に、半分の大きさで振る。傍線は列の左、打ち消し線は列の中央を通る。
+
+行間（既存の設定）はそのまま列の間隔になる。左が 80%、右が 200%。
+
+![行間 80% と 200% の縦組み画面を並べたもの](./docs/images/japanese/vertical-line-spacing.png)
+
+いずれもシミュレータの実画面。`scripts/run_simulator_screenshots.py` で撮っている。
+
+### 使い方
+
+1. 設定 → フォントを管理 から `BIZUDGothic` などをダウンロードする
+2. 本文フォントにそのフォントを選ぶ（UIの日本語もこのフォントから出る）
+3. 設定 → 言語 で「日本語」を選ぶ
+4. 縦組みにするなら 設定 → 読書 → 組み方向 を「縦書き」にする
+
+### 既知の制限
+
+- 画像や表を含む本は縦組みで崩れる。組版を「幅と高さを入れ替えた紙面」で行っているため
+- バイオニックリーディングは縦組みでは効かない。組版が語を割って測るのに対し欧文は寝かせて描くため、語の位置がずれる。設定は残るが縦組みでは無効になる
+- 行間を詰めすぎると列が重なる。ただし同じ値では横組みでも行が重なる
+- 日本語フォントの配信は [zrn-ns/crosspoint-jp](https://github.com/zrn-ns/crosspoint-jp) の
+  リリース資産に依存している。常用するなら自前にミラーすること
+- **実機未検証。** シミュレータの画面までしか確認していない
+
+### 読むものを用意する
+
+[NovelToXteink](https://github.com/simeon052/NovelToXteink) — 小説家になろう・カクヨムの
+Web小説をダウンロードし、Xteink X3 / X4 Pro 向けに最適化した EPUB や XTC へ変換する C# アプリ。
+縦書き組版とルビにも対応している。
+
+---
+
 ## What's different in this fork
 
 CrossDiTo 1.5.1 starts from **CrossInk 1.5.0**. Everything below is a CrossDiTo-specific change made after that baseline. No inherited CrossInk features are presented as work from this fork.

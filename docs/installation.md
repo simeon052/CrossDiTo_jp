@@ -43,6 +43,10 @@ Install `esptool`:
 pip3 install esptool
 ```
 
+esptool v5 renamed its subcommands to hyphenated form (`write_flash` became
+`write-flash`, `read_flash` became `read-flash`). The commands below use the v5
+names; on esptool v4 and earlier, use the underscore spelling instead.
+
 Download `CrossDiTo-x4-pro-v1.5.1.bin` from the [CrossDiTo releases page](https://github.com/dito94/CrossDiTo/releases), then connect the X4 Pro with USB-C.
 
 Find the device port:
@@ -59,10 +63,10 @@ Flash the firmware using the X4 Pro's `esp32s3` target:
 
 ```sh
 # Linux
-esptool.py --chip esp32s3 --port /dev/ttyACM0 --baud 921600 write_flash 0x10000 /path/to/CrossDiTo-x4-pro.bin
+esptool --chip esp32s3 --port /dev/ttyACM0 --baud 921600 write-flash 0x10000 /path/to/CrossDiTo-x4-pro.bin
 
 # macOS
-esptool.py --chip esp32s3 --port /dev/cu.usbmodem2101 --baud 921600 write_flash 0x10000 /path/to/CrossDiTo-x4-pro.bin
+esptool --chip esp32s3 --port /dev/cu.usbmodem2101 --baud 921600 write-flash 0x10000 /path/to/CrossDiTo-x4-pro.bin
 ```
 
 Replace the port and firmware path with your actual values.

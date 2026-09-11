@@ -54,6 +54,8 @@ class Section {
     std::string tmpSectionPath;
     bool reusedHtml = false;
     bool pageCompletionFailed = false;
+    // startBuild() 時点の組み方向。buildSomeMore() が続きを同じ向きで測るために持つ。
+    bool verticalWriting = false;
     CssParser* cssParser = nullptr;
     // HTML byte progress, for estimating the section's total page count while it's still building.
     uint32_t bytesConsumed = 0;
