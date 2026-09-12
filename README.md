@@ -70,8 +70,11 @@ See [docs/japanese.md](./docs/japanese.md) for the implementation notes.
 ### 入手と書き込み
 
 このフォークのビルドは [Releases](https://github.com/simeon052/CrossDiTo_jp/releases) にある。
-実機（Xteink X4 Pro / UC8279 パネル）で確認済みなのは **1.5.1-jp.4** 以降。
+実機（Xteink X4 Pro / UC8279 パネル）で確認済みなのは **1.5.1.4**（日本語版 jp.4）以降。
 jp.1 と jp.2 は UC8279 の個体で起動画面から進まないので使わないこと。
+
+版の表記は 1.5.1.4 から `1.5.1-jp.N` ではなく `1.5.1.N` にした。端末の OTA の版比較器が
+`-` 以降を読み飛ばすので、`-jp.N` のままでは jp 版どうしの新旧を区別できなかった。
 
 > [!IMPORTANT]
 > **アプリ領域は2面ある。** どちらを起動するかは `otadata` が決める。SDカードや OTA で更新した
