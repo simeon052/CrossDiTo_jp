@@ -240,9 +240,9 @@ void SdCardFontSystem::ensureUiFallbacks(GfxRenderer& renderer) {
   // UIのCJKフォールバックも消える（SdCardFontManager::unloadAll)。復旧は各
   // 呼び出し側任せで、抜けがあると本を開くか再起動するまでUIの日本語が全部
   // 豆腐のままになる。画面遷移のたびにここで拾い直す。
-  if (renderer.hasFallbackFonts()) return;          // 生きている
+  if (renderer.hasFallbackFonts()) return;           // 生きている
   if (SETTINGS.sdFontFamilyName[0] == '\0') return;  // SDフォントを使っていない
-  ensureLoaded(renderer);                           // 本文フォントごと読み直す。fallback もここで登録される
+  ensureLoaded(renderer);                            // 本文フォントごと読み直す。fallback もここで登録される
 }
 
 void SdCardFontSystem::setupUiFallbacks(GfxRenderer& renderer) {
