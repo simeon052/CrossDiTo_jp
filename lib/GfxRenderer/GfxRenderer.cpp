@@ -900,8 +900,8 @@ static void renderCharSmallCaps(const GfxRenderer& renderer, GfxRenderer::Render
 }
 
 static void drawSyntheticGreekGlyphSideways(const GfxRenderer& renderer, const SyntheticSolidGlyphMetrics& metrics,
-                                           const uint32_t cp, const int lineHeight, const int cursorX,
-                                           const int cursorY, const bool pixelState) {
+                                            const uint32_t cp, const int lineHeight, const int cursorX,
+                                            const int cursorY, const bool pixelState) {
   const int baseX = cursorX + lineHeight - 1 - metrics.ascender + metrics.top;
   const int baseY = cursorY + metrics.left;
   const int s = syntheticStroke(metrics);
@@ -3191,7 +3191,7 @@ void GfxRenderer::drawRotatedRun(const int fontId, const int x, const int y, con
     // Differential rounding: snap (previous advance + current kern) as one unit,
     // subtracting for the rotated coordinate direction.
     if (prevCp != 0) {
-      const auto kernFP = font.getKerning(prevCp, cp, style);  // 4.4 fixed-point kern
+      const auto kernFP = font.getKerning(prevCp, cp, style);           // 4.4 fixed-point kern
       lastBaseY += advanceSign * fp4::toPixel(prevAdvanceFP + kernFP);  // snap 12.4 fixed-point to nearest pixel
     }
 
