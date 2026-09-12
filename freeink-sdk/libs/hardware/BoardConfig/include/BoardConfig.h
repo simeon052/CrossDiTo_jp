@@ -355,6 +355,10 @@ enum class Board : uint8_t {
   Sticky,
   PaperMono,
   M5PaperS3,  // ESP32-S3 sibling of M5Paper v1.1: same ED047TC1 glass, no IT8951 — raw parallel via LovyanGFX
+  // 上流の表示ライブラリ（Ssd1677Driver）が分岐先として参照する。こちらは
+  // この機種のボード定義を取り込んでいないので、コンパイルを通すための値。
+  // ボード定義まで上流に揃えるときに実体を持たせること。
+  WsEpaper397,
 };
 
 // How the board reports button presses.
@@ -1622,6 +1626,12 @@ inline bool isM5PaperV11() { return ACTIVE.board == Board::M5PaperV11; }
 inline bool isM5PaperS3() { return ACTIVE.board == Board::M5PaperS3; }
 inline bool isSticky() { return ACTIVE.board == Board::Sticky; }
 inline bool isX4Pro() { return ACTIVE.board == Board::XteinkX4Pro; }
+// 上流の display ライブラリが参照する。取り込んでいるボード集合に OnePage は
+// 無いので常に false。ボード定義まで上流に揃えるときに本来の判定へ戻すこと。
+inline bool isOnePage() { return false; }
+// 同上。X4 Classic も取り込んでいない。false を返すと X4 Pro の経路
+// （PLL を programming する）になり、この機では正しい。
+inline bool isX4Classic() { return false; }
 inline bool isPaperMono() { return ACTIVE.board == Board::PaperMono; }
 inline bool hasTouch() { return ACTIVE.touch.controller != TouchController::None; }
 inline bool hasHomeKey() { return ACTIVE.touch.hasHomeKey; }

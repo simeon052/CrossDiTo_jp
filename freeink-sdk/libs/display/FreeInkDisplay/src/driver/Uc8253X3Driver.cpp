@@ -191,23 +191,12 @@ bool Uc8253X3Driver::displayStart(EpdBus& bus, const uint8_t* fb, const uint8_t*
   } else {
     // _fast turbo differential; DTM1 retains the previous frame.
     loadBankCdi(bus, 0x29, 0x07, _cfg.fast);
-    if (_darkBackground) {
-      // Inverted content: a differential fast idles unchanged pixels, so the
-      // light residue of every white->black transition parks in the black
-      // background and accumulates between full syncs. Rewrite DTM1 as the
-      // complement of the target: every pixel classifies as changed and is
-      // re-driven toward its target — optically invisible on pixels already at
-      // their endpoint. displayFinish()'s DTM1 resync restores the true
-      // baseline afterwards. Same mechanism as the SSD1677/Paper Mono drivers'
-      // dark-background paths.
-      bus.sendPlaneFlippedInverted(CMD_DTM1, fb, _h, _wb);
-      bus.cmd(CMD_DATA_STOP);
-    }
     bus.sendPlaneFlipped(CMD_DTM2, fb, _h, _wb);
   }
 
-  // doFullSync re-powers the charge pump even if already on (higher current).
-  if (!_isScreenOn || doFullSync) {
+  // PON only when the rails are down: a redundant PON on a powered UC8253 gives
+  // no BUSY LOW edge, so the X3TwoPhase wait burns its 1000 ms ceiling.
+  if (!_isScreenOn) {
     bus.cmd(CMD_POWER_ON);
     bus.waitBusy(" X3_PON");
     _isScreenOn = true;
