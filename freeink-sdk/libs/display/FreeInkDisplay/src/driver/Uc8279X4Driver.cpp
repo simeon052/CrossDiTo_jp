@@ -178,9 +178,7 @@ bool Uc8279X4Driver::displayStart(EpdBus& bus, const uint8_t* fb, const uint8_t*
   // Same differential model as the UC8179 sibling: full OTP flash on an explicit
   // Full request or the forced first clear, otherwise a PTIN/PTOUT partial whose
   // OLD plane (0x10) holds the previous displayed frame (synced in displayFinish).
-  // 調査用: 高速更新を止めて必ず全面更新にする。実機で起動画面のあと画面が
-  // 変わらない件を切り分けるため。原因が判ったら戻す。
-  const bool fast = false && (mode != RefreshMode::Full) && !_needFullClear && _oldPlaneValid;
+  const bool fast = (mode != RefreshMode::Full) && !_needFullClear && _oldPlaneValid;
 
   streamPlane(bus, CMD_DTM2, fb);
   if (!fast) {
