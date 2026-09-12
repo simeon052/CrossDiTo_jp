@@ -961,6 +961,10 @@ inline std::vector<SettingInfo> buildGroupedReaderSettingsList(const std::vector
   addReaderSetting(StrId::STR_SD_FONT_SIZE_RANGE);
 
   readerSettings.push_back(SettingInfo::SectionHeader(StrId::STR_READER_PAGE_LAYOUT));
+  // 組み方向はページレイアウトの根本なので先頭。縦組みの字間はその直後に置く
+  // （横組みでは効かないが、選べる場所が離れていると関係が分かりにくい）。
+  addReaderSetting(StrId::STR_WRITING_MODE);
+  addReaderSetting(StrId::STR_VERTICAL_CHAR_SPACING);
   addReaderSetting(StrId::STR_LINE_SPACING);
   addReaderSetting(StrId::STR_WORD_SPACING);
   addReaderSetting(StrId::STR_SCREEN_MARGIN);
