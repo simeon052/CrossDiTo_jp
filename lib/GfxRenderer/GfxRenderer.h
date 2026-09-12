@@ -370,7 +370,9 @@ class GfxRenderer {
   // 横組みでの getTextAdvanceX() に対応する。
   int getTextAdvanceVertical(int fontId, const char* text, EpdFontFamily::Style style) const;
   // 縦組みの字間。em に対する百分率で、0-30 に丸める。
-  void setVerticalCharSpacing(const uint8_t percent) const { verticalCharSpacingPercent_ = percent > 30 ? 30 : percent; }
+  void setVerticalCharSpacing(const uint8_t percent) const {
+    verticalCharSpacingPercent_ = percent > 30 ? 30 : percent;
+  }
   uint8_t getVerticalCharSpacing() const { return verticalCharSpacingPercent_; }
 
   // 縦組みモード。立っている間だけ getTextAdvanceX() が縦の送りを返すので、
@@ -416,7 +418,9 @@ class GfxRenderer {
       renderer_.verticalTextMode_ = vertical;
       renderer_.verticalPageTransform_ = transform;
       if (charSpacingPercent >= 0) {
-        renderer_.setVerticalCharSpacing(static_cast<uint8_t>(charSpacingPercent));
+        // int のまま丸めてから縮める。先に uint8_t へ落とすと 256 が 0 に
+        // 巻き戻り、範囲外の値が範囲内の値として通ってしまう。
+        renderer_.setVerticalCharSpacing(static_cast<uint8_t>(charSpacingPercent > 30 ? 30 : charSpacingPercent));
       }
     }
     ~VerticalTextScope() {
