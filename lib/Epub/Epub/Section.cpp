@@ -18,17 +18,19 @@ namespace {
 constexpr uint32_t SECTION_CACHE_MAGIC = 0x535843FF;  // bytes: 0xFF, "CXS"
 // v60: reserve page-edge space for ruby overhang and prefer longer equal-cost
 // CJK lines, invalidating cached pagination from the prior layout contract.
-constexpr uint8_t SECTION_FILE_VERSION = 60;
+// 61: 組み方向と縦書きの字間をヘッダに入れた。字間はここに無かったので、
+// 設定を変えても古いページ割りがそのまま使われ、画面が変わらなかった。
+constexpr uint8_t SECTION_FILE_VERSION = 61;
 // Suspended incremental build: valid pages plus LUTs and a parse-watermark trailer.
 // Change this with layout or payload changes so stale partial pages cannot resume
 // under a different layout contract.
 constexpr uint8_t SECTION_FILE_PARTIAL_VERSION = 0xF9;
 constexpr uint16_t INITIAL_SECTION_PAGE_LUT_ENTRIES = 1024;
-constexpr uint32_t HEADER_SIZE = sizeof(SECTION_CACHE_MAGIC) + sizeof(uint8_t) + sizeof(int) + sizeof(float) +
-                                 sizeof(bool) + sizeof(bool) + sizeof(uint8_t) + sizeof(uint16_t) + sizeof(uint16_t) +
-                                 sizeof(uint16_t) + sizeof(bool) + sizeof(bool) + sizeof(uint8_t) + sizeof(bool) +
-                                 sizeof(bool) + sizeof(uint8_t) + sizeof(uint8_t) + sizeof(uint32_t) +
-                                 sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t);
+constexpr uint32_t HEADER_SIZE =
+    sizeof(SECTION_CACHE_MAGIC) + sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(bool) + sizeof(bool) +
+    sizeof(uint8_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(bool) + sizeof(bool) +
+    sizeof(uint8_t) + sizeof(bool) + sizeof(bool) + sizeof(uint8_t) + sizeof(uint8_t) + sizeof(bool) + sizeof(uint8_t) +
+    sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t);
 constexpr size_t SECTION_HTML_STREAM_CHUNK_SIZE = 8192;
 constexpr size_t LOW_MEMORY_SECTION_HTML_STREAM_CHUNK_SIZE = 1024;
 
@@ -223,9 +225,9 @@ bool Section::writeSectionFileHeader(const ReaderRenderSpec& spec) {
                                    sizeof(spec.viewportWidth) + sizeof(spec.viewportHeight) + sizeof(pageCount) +
                                    sizeof(spec.hyphenationEnabled) + sizeof(spec.embeddedStyle) +
                                    sizeof(spec.imageRendering) + sizeof(spec.bionicReadingEnabled) +
-                                   sizeof(spec.guideReadingEnabled) + sizeof(uint8_t) + sizeof(uint32_t) +
-                                   sizeof(uint32_t) + sizeof(uint8_t) + sizeof(uint32_t) + sizeof(uint32_t) +
-                                   sizeof(uint32_t),
+                                   sizeof(spec.guideReadingEnabled) + sizeof(uint8_t) + sizeof(spec.verticalWriting) +
+                                   sizeof(spec.verticalCharSpacing) + sizeof(uint32_t) + sizeof(uint32_t) +
+                                   sizeof(uint8_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t),
                 "Header size mismatch");
   return serialization::tryWritePod(file, SECTION_CACHE_MAGIC) &&
          serialization::tryWritePod(file, SECTION_FILE_VERSION) && serialization::tryWritePod(file, spec.fontId) &&
@@ -242,6 +244,10 @@ bool Section::writeSectionFileHeader(const ReaderRenderSpec& spec) {
          serialization::tryWritePod(file, spec.guideReadingEnabled) &&
          serialization::tryWritePod(file, spec.wordSpacing) &&
          serialization::tryWritePod(file, static_cast<uint8_t>(spec.renderMode)) &&
+         // 組み方向と字間もページ割りを変えるので、ここで縛る。字間が入って
+         // いなかったころは、設定を変えても古いページ割りが再利用されていた。
+         serialization::tryWritePod(file, spec.verticalWriting) &&
+         serialization::tryWritePod(file, spec.verticalCharSpacing) &&
          serialization::tryWritePod(file,
                                     pageCount) &&  // Placeholder for page count (will be initially 0, patched later)
          serialization::tryWritePod(file, static_cast<uint32_t>(0)) &&  // Placeholder for LUT offset (patched later)
@@ -305,6 +311,8 @@ bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
     bool fileGuideReadingEnabled;
     uint8_t fileWordSpacing;
     uint8_t fileRenderMode;
+    bool fileVerticalWriting;
+    uint8_t fileVerticalCharSpacing;
     if (!serialization::tryReadPod(file, fileFontId) || !serialization::tryReadPod(file, fileLineCompression) ||
         !serialization::tryReadPod(file, fileExtraParagraphSpacing) ||
         !serialization::tryReadPod(file, fileForceParagraphIndents) ||
@@ -314,7 +322,9 @@ bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
         !serialization::tryReadPod(file, fileEmbeddedStyle) || !serialization::tryReadPod(file, fileImageRendering) ||
         !serialization::tryReadPod(file, fileBionicReadingEnabled) ||
         !serialization::tryReadPod(file, fileGuideReadingEnabled) ||
-        !serialization::tryReadPod(file, fileWordSpacing) || !serialization::tryReadPod(file, fileRenderMode)) {
+        !serialization::tryReadPod(file, fileWordSpacing) || !serialization::tryReadPod(file, fileRenderMode) ||
+        !serialization::tryReadPod(file, fileVerticalWriting) ||
+        !serialization::tryReadPod(file, fileVerticalCharSpacing)) {
       file.close();
       LOG_ERR("SCT", "Deserialization failed: truncated section header");
       clearCache();
@@ -328,7 +338,8 @@ bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
         spec.hyphenationEnabled != fileHyphenationEnabled || spec.embeddedStyle != fileEmbeddedStyle ||
         spec.imageRendering != fileImageRendering || spec.bionicReadingEnabled != fileBionicReadingEnabled ||
         spec.guideReadingEnabled != fileGuideReadingEnabled || spec.wordSpacing != fileWordSpacing ||
-        static_cast<uint8_t>(spec.renderMode) != fileRenderMode) {
+        static_cast<uint8_t>(spec.renderMode) != fileRenderMode || spec.verticalWriting != fileVerticalWriting ||
+        spec.verticalCharSpacing != fileVerticalCharSpacing) {
       file.close();
       LOG_ERR("SCT", "Deserialization failed: Parameters do not match");
       clearCache();
@@ -413,7 +424,7 @@ bool Section::createSectionFile(const ReaderRenderSpec& spec, const std::functio
                                 const SectionBuildOptions buildOptions) {
   // 縦組みでは行分割を縦の送りで測る。ここで囲っておけば、レイアウトエンジンの
   // 測定呼び出しは書き換えずに済む（GfxRenderer::VerticalTextScope 参照）。
-  const GfxRenderer::VerticalTextScope verticalScope(renderer, spec.verticalWriting);
+  const GfxRenderer::VerticalTextScope verticalScope(renderer, spec.verticalWriting, spec.verticalCharSpacing);
   const int fontId = spec.fontId;
   const float lineCompression = spec.lineCompression;
   const bool extraParagraphSpacing = spec.extraParagraphSpacing;
@@ -818,7 +829,7 @@ bool Section::createSectionFile(const ReaderRenderSpec& spec, const std::functio
 
 bool Section::startBuild(const ReaderRenderSpec& spec, const SectionBuildOptions buildOptions,
                          const std::function<void()>& popupFn) {
-  const GfxRenderer::VerticalTextScope verticalScope(renderer, spec.verticalWriting);
+  const GfxRenderer::VerticalTextScope verticalScope(renderer, spec.verticalWriting, spec.verticalCharSpacing);
   const int fontId = spec.fontId;
   const float lineCompression = spec.lineCompression;
   const bool extraParagraphSpacing = spec.extraParagraphSpacing;
@@ -942,6 +953,7 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const SectionBuildOptions
     return false;
   }
   ctx->verticalWriting = spec.verticalWriting;
+  ctx->verticalCharSpacing = spec.verticalCharSpacing;
   ctx->lutCapacity = INITIAL_SECTION_PAGE_LUT_ENTRIES;
   ctx->lut = makeUniqueNoThrow<Section::PageLutEntry[]>(ctx->lutCapacity);
   if (!ctx->lut) {
@@ -1051,8 +1063,8 @@ bool Section::buildSomeMore(const int maxPages) {
     LOG_ERR("SCT", "buildSomeMore called with no active build");
     return false;
   }
-  // 続きを組むときも、始めたときと同じ組み方向で測る。
-  const GfxRenderer::VerticalTextScope verticalScope(renderer, build_->verticalWriting);
+  // 続きを組むときも、始めたときと同じ組み方向・同じ字間で測る。
+  const GfxRenderer::VerticalTextScope verticalScope(renderer, build_->verticalWriting, build_->verticalCharSpacing);
   // Pace on pages laid out by THIS build, not pageCount: during a rebuild over a partial,
   // pageCount stays pinned at the partial's watermark until the build passes it, which
   // would otherwise turn one "small" chunk into a blocking rebuild of the whole watermark.

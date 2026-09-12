@@ -6082,9 +6082,12 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int fo
     verticalTransform.contentTop = orientedMarginTop;
     verticalTransform.columnWidth =
         std::max(1, static_cast<int>(renderer.getLineHeight(fontId) * SETTINGS.getReaderLineCompression() + 0.5f));
-    renderer.setVerticalCharSpacing(SETTINGS.verticalCharSpacing);
   }
-  const GfxRenderer::VerticalTextScope verticalScope(renderer, verticalWriting, verticalTransform);
+  // 字間はスコープに預ける。ここで直接設定していたころは組版側に届かず、
+  // 日本語のように語が1文字ずつ切れる本では、設定を変えても画面が変わらなかった。
+  const int verticalCharSpacing = verticalWriting ? static_cast<int>(SETTINGS.verticalCharSpacing)
+                                                  : GfxRenderer::VerticalTextScope::KEEP_CHAR_SPACING;
+  const GfxRenderer::VerticalTextScope verticalScope(renderer, verticalWriting, verticalTransform, verticalCharSpacing);
 
   // Font prewarm: scan pass accumulates text, then prewarm, then real render
   auto* fcm = renderer.getFontCacheManager();
