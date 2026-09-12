@@ -1,7 +1,7 @@
 """
 PlatformIO pre-build script: inject git info into version defines.
 
-  x4-pro:          1.1.0-dev+<branch>         (local development build)
+  x4-pro:          1.1.0-dev+<branch>.<hash>  (local development build)
   x4-pro-debug:    1.1.0-debug-<branch>+<hash>
   production:      1.1.0                      (when $CROSSINK_RELEASE_VERSION is set)
   release candidate: 1.1.0-rc+<hash>
@@ -91,7 +91,10 @@ def _read_ini(project_dir):
             # Match PlatformIO's local override convention: values from the
             # optional local file take precedence over the tracked config.
             config_paths.append(local_ini_path)
-        config.read(config_paths)
+        # platformio.ini carries Japanese comments in this fork. Without an explicit
+        # encoding configparser decodes it with the locale codec (cp932 on Japanese
+        # Windows) and the whole build fails before it starts.
+        config.read(config_paths, encoding='utf-8')
     else:
         warn(f'platformio.ini not found at {ini_path}')
     return config
@@ -128,7 +131,10 @@ def get_firmware_version(project_dir, pioenv):
     # than presenting the user with a misleading "unknown" build identity.
     if branch == 'unknown':
         return version
-    return f'{version}-dev+{branch}'
+    # CI builds from a detached HEAD, so every branch collapses to "detached" and
+    # two different commits produce the same string. Carry the commit so a photo of
+    # the boot screen is enough to tell which image a device is actually running.
+    return f'{version}-dev+{branch}.{get_git_short_hash(project_dir, length=7)}'
 
 
 def inject_version(env):

@@ -1040,7 +1040,12 @@ inline std::vector<SettingInfo> buildReaderFontSettingsList(const std::vector<Se
 
 inline std::vector<SettingInfo> buildReaderPageLayoutSettingsList(const std::vector<SettingInfo>& allSettings) {
   std::vector<SettingInfo> settings;
-  settings.reserve(6);
+  settings.reserve(8);
+  // 組み方向はページレイアウトの根本なので先頭。縦書きの字間はその直後に置く
+  // （横組みでは効かないが、選べる場所が離れていると関係が分かりにくい）。
+  // なお直下の STR_ORIENTATION は端末の縦持ち/横持ちで、組み方向とは別物。
+  addSettingByName(settings, allSettings, StrId::STR_WRITING_MODE);
+  addSettingByName(settings, allSettings, StrId::STR_VERTICAL_CHAR_SPACING);
   addSettingByName(settings, allSettings, StrId::STR_ORIENTATION);
   addSettingByName(settings, allSettings, StrId::STR_SCREEN_MARGIN);
   addSettingByName(settings, allSettings, StrId::STR_PARA_ALIGNMENT);

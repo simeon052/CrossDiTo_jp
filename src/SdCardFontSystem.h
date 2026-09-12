@@ -35,6 +35,9 @@ class SdCardFontSystem {
 
   /// Release all SD-font RAM that network/TLS work does not need.
   void releaseForNetwork(GfxRenderer& renderer);
+  // releaseForNetwork() の対。UIのCJKフォールバックが消えていたら戻す。
+  // 登録済み、またはSDフォントを使っていなければ何もしない。
+  void ensureUiFallbacks(GfxRenderer& renderer);
 
   /// Ensure the font catalog is available for settings/web enumeration, including
   /// newly uploaded or deleted fonts visible in the web UI.

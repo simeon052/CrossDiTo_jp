@@ -235,6 +235,16 @@ void SdCardFontSystem::releaseForNetwork(GfxRenderer& renderer) {
   registryDirty_.store(true, std::memory_order_release);
 }
 
+void SdCardFontSystem::ensureUiFallbacks(GfxRenderer& renderer) {
+  // ネットワーク処理は無線用にヒープを空けるため SDフォントを解放し、その際に
+  // UIのCJKフォールバックも消える（SdCardFontManager::unloadAll)。復旧は各
+  // 呼び出し側任せで、抜けがあると本を開くか再起動するまでUIの日本語が全部
+  // 豆腐のままになる。画面遷移のたびにここで拾い直す。
+  if (renderer.hasFallbackFonts()) return;           // 生きている
+  if (SETTINGS.sdFontFamilyName[0] == '\0') return;  // SDフォントを使っていない
+  ensureLoaded(renderer);                            // 本文フォントごと読み直す。fallback もここで登録される
+}
+
 void SdCardFontSystem::setupUiFallbacks(GfxRenderer& renderer) {
   // ここが素通りすると、UIの日本語・中国語・韓国語が全部豆腐になる。
   // 黙って return すると原因が追えないので、どの条件で降りたかを残す。
@@ -271,11 +281,26 @@ void SdCardFontSystem::setupUiFallbacks(GfxRenderer& renderer) {
   }
 
   for (const auto& ui : kUiFontSizes) {
-    const int sdFontId = manager_.loadFamilyExtraSize(*family, renderer, ui.pointSize);
+    // 要求どおりの大きさが無ければ一番近いもので代用する。ダウンロードは
+    // sdFontSizeRange で絞られるので、既定の TINY（10/12/14/16）だと 8pt が
+    // カードに無い。そのまま諦めると、8pt を使うステータスバーのタイトルだけが
+    // 豆腐になる（10/12pt を使う設定画面は出るので気づきにくい）。
+    uint8_t pointSize = ui.pointSize;
+    if (family->findFile(pointSize) == nullptr) {
+      const auto* closest = family->findClosestFile(pointSize);
+      if (closest == nullptr) {
+        LOG_DBG("SDFS", "No SD glyphs at all for UI fallback in %s", familyName.c_str());
+        continue;
+      }
+      LOG_DBG("SDFS", "UI fallback %u pt missing in %s - using %u pt", ui.pointSize, familyName.c_str(),
+              closest->pointSize);
+      pointSize = closest->pointSize;
+    }
+    const int sdFontId = manager_.loadFamilyExtraSize(*family, renderer, pointSize);
     if (sdFontId != 0) {
       renderer.setFallbackFont(ui.fontId, sdFontId);
     } else {
-      LOG_DBG("SDFS", "No %u pt SD glyphs for UI fallback in %s", ui.pointSize, familyName.c_str());
+      LOG_DBG("SDFS", "Failed to load %u pt SD glyphs for UI fallback in %s", pointSize, familyName.c_str());
     }
   }
 }
