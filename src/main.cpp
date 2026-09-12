@@ -825,6 +825,11 @@ bool setupDisplayAndFonts(const bool seamless, const bool loadReaderResources, c
     sdFontSystem.begin(renderer);
   } else {
     LOG_DBG("MAIN", "Skipping EPUB scratch workspace and SD fonts for minimal network boot");
+    // 本文フォントは飛ばすが、UIのCJKフォールバックだけは載せる。ここを丸ごと
+    // 飛ばしていたので、Wi-Fi・OTA・フォント管理の画面が日本語で全部豆腐に
+    // なっていた。載せるのは 8/10/12pt の3つで、字形はページ単位の遅延読みなので
+    // TLS のために空けたヒープをほとんど食わない。
+    sdFontSystem.beginUiOnly(renderer);
   }
   return true;
 }

@@ -24,6 +24,12 @@ class SdCardFontSystem {
   /// is explicitly requested.
   void begin(GfxRenderer& renderer);
 
+  /// 最小構成のネットワーク起動用。本文フォントは読まず、UIのCJKフォール
+  /// バックに要る小さい寸法だけを載せる。ネットワーク起動はTLSのためヒープを
+  /// 空ける目的でSDフォントを丸ごと飛ばしており、その結果 Wi-Fi・OTA・フォント
+  /// 管理・KOReader・OPDS の画面で日本語が全部豆腐になっていた。
+  void beginUiOnly(GfxRenderer& renderer);
+
   /// Ensure the correct SD font family is loaded for the current settings.
   /// Call before entering the reader or after settings change.
   /// Also re-discovers if the registry has been marked dirty (e.g. by web upload).

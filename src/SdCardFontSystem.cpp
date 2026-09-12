@@ -26,6 +26,10 @@ constexpr UiFontSize kUiFontSizes[] = {
 
 enum class FontFileSelection : uint8_t { Closest, Exact };
 
+// UIのフォールバックに使ってよいかを判じる字。1つでも持っていれば CJK フォント
+// とみなす。ラテン専用のSDフォントをフォールバックに据えても意味がない。
+constexpr uint32_t kCjkProbes[] = {0x4E00, 0x3042, 0x30A2, 0xAC00};
+
 // This is a cold setup path, not a render loop. The 320-byte stack footprint
 // (path and filename) replace a heap-allocated whole-font catalog
 // during every dictionary swap, avoiding persistent fragmentation on the C3.
@@ -116,6 +120,46 @@ void SdCardFontSystem::begin(GfxRenderer& renderer) {
 
   ensureLoaded(renderer);
   releaseRegistry();
+}
+
+void SdCardFontSystem::beginUiOnly(GfxRenderer& renderer) {
+  SETTINGS.sdFontIdResolver = [](void* ctx, const char* familyName, uint8_t pointSize) -> int {
+    return static_cast<SdCardFontSystem*>(ctx)->resolveFontId(familyName, pointSize);
+  };
+  SETTINGS.sdFontResolverCtx = this;
+
+  const char* familyName = SETTINGS.sdFontFamilyName;
+  if (familyName[0] == '\0') {
+    LOG_DBG("SDFS", "UI-only boot: no SD font selected");
+    return;
+  }
+
+  ensureRegistry();
+  int registered = 0;
+  for (const auto& ui : kUiFontSizes) {
+    char path[160] = {};
+    uint8_t pointSize = 0;
+    if (!findInstalledFontFile(familyName, ui.pointSize, FontFileSelection::Closest, path, sizeof(path), pointSize)) {
+      continue;
+    }
+    const int sdFontId = manager_.loadFamilyExtraFile(path, familyName, pointSize, renderer);
+    if (sdFontId == 0) continue;
+    const auto it = renderer.getFontMap().find(sdFontId);
+    if (it == renderer.getFontMap().end()) continue;
+    bool hasCjk = false;
+    for (const uint32_t cp : kCjkProbes) {
+      if (it->second.hasCodepoint(cp)) {
+        hasCjk = true;
+        break;
+      }
+    }
+    if (!hasCjk) continue;
+    renderer.setFallbackFont(ui.fontId, sdFontId);
+    ++registered;
+  }
+  releaseRegistry();
+  LOG_INF("SDFS", "UI-only boot: %d/%d CJK fallback sizes registered for %s", registered,
+          static_cast<int>(sizeof(kUiFontSizes) / sizeof(kUiFontSizes[0])), familyName);
 }
 
 void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
@@ -311,7 +355,6 @@ void SdCardFontSystem::setupUiFallbacksDirect(GfxRenderer& renderer, const char*
   const auto readerIt = renderer.getFontMap().find(manager_.getFontId(manager_.currentFamilyName()));
   if (readerIt == renderer.getFontMap().end()) return;
 
-  static constexpr uint32_t kCjkProbes[] = {0x4E00, 0x3042, 0x30A2, 0xAC00};
   bool hasCjk = false;
   for (const uint32_t cp : kCjkProbes) {
     if (readerIt->second.hasCodepoint(cp)) {
