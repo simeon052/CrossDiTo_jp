@@ -57,6 +57,10 @@ class GfxRenderer {
   };
 
  private:
+  // Shared body of drawTextRotated90CW / drawTextSideways: same run, opposite turn.
+  void drawRotatedRun(int fontId, int x, int y, const char* text, bool black, EpdFontFamily::Style style,
+                      bool sideways) const;
+
   static constexpr size_t BW_BUFFER_CHUNK_SIZE = 8000;  // 8KB chunks to allow for non-contiguous memory
   static constexpr size_t MAX_BW_BUFFER_CHUNKS =
       (HalDisplay::BUFFER_SIZE + BW_BUFFER_CHUNK_SIZE - 1) / BW_BUFFER_CHUNK_SIZE;
@@ -343,9 +347,17 @@ class GfxRenderer {
   std::vector<std::string> wrappedText(int fontId, const char* text, int maxWidth, int maxLines,
                                        EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
 
-  // Helper for drawing rotated text (90 degrees clockwise, for side buttons)
+  // Helper for drawing rotated text (for side buttons). Despite the name the
+  // turn is counter-clockwise: glyph tops face left and the run walks upward
+  // from `y`, which is why every caller passes the BOTTOM of the label. The
+  // name is upstream's; the behaviour is what the side labels want.
   void drawTextRotated90CW(int fontId, int x, int y, const char* text, bool black = true,
                            EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
+
+  // Latin runs inside Japanese vertical text: turned clockwise, reading top to
+  // bottom (CSS text-orientation: sideways). `y` is the TOP of the run.
+  void drawTextSideways(int fontId, int x, int y, const char* text, bool black = true,
+                        EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
   int getTextHeight(int fontId) const;
 
   // --- 縦書き（tategaki） ---------------------------------------------------

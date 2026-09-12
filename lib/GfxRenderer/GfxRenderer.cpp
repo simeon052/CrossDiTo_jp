@@ -487,7 +487,15 @@ static AlignedMemRect screenRectToAlignedMemRect(const GfxRenderer::Orientation 
   return out;
 }
 
-enum class TextRotation { None, Rotated90CW };
+// Rotated90CW is a misnomer kept as-is for upstream parity: it puts glyph tops
+// toward screen-left and advances the run upward, which is a counter-clockwise
+// turn. That is what the X3 side-button labels want, so the behaviour stays.
+//
+// Sideways is the turn Japanese vertical text needs for Latin runs (CSS
+// text-orientation: sideways in vertical-rl): glyph tops toward screen-right,
+// run advancing downward. Vertical body text used Rotated90CW and so rendered
+// "100" lying on its wrong side and reading bottom-to-top.
+enum class TextRotation { None, Rotated90CW, Sideways };
 
 struct SyntheticSolidGlyphMetrics {
   uint16_t advanceX;
@@ -567,6 +575,16 @@ static void fillSyntheticSolidGlyphRotated90CW(const GfxRenderer& renderer, cons
                                                const int cursorX, const int cursorY, const bool pixelState) {
   fillRectClipped(renderer, cursorX + metrics.ascender - metrics.top, cursorY - metrics.left - metrics.width + 1,
                   metrics.height, metrics.width, pixelState);
+}
+
+// Sideways sibling of fillSyntheticSolidGlyphRotated90CW. `lineHeight` is the
+// font's advanceY: the band the run is mirrored inside (see renderCharImpl).
+static void fillSyntheticSolidGlyphSideways(const GfxRenderer& renderer, const SyntheticSolidGlyphMetrics& metrics,
+                                            const int lineHeight, const int cursorX, const int cursorY,
+                                            const bool pixelState) {
+  const int baseX = cursorX + lineHeight - 1 - metrics.ascender + metrics.top;
+  fillRectClipped(renderer, baseX - metrics.height + 1, cursorY + metrics.left, metrics.height, metrics.width,
+                  pixelState);
 }
 
 static int syntheticStroke(const SyntheticSolidGlyphMetrics& metrics) {
@@ -650,6 +668,40 @@ static void drawSyntheticReplacementGlyphRotated90CW(const GfxRenderer& renderer
     for (int gx = 0; gx < qW; gx++) {
       if (questionTemplatePixel(gx * 7 / qW, gy * 9 / qH)) {
         drawPixelClipped(renderer, baseX + qTop + gy, baseY - (qLeft + gx), !pixelState);
+      }
+    }
+  }
+}
+
+static void drawSyntheticReplacementGlyphSideways(const GfxRenderer& renderer,
+                                                  const SyntheticSolidGlyphMetrics& metrics, const int lineHeight,
+                                                  const int cursorX, const int cursorY, const bool pixelState) {
+  const int baseX = cursorX + lineHeight - 1 - metrics.ascender + metrics.top;
+  const int baseY = cursorY + metrics.left;
+  const int w = metrics.width;
+  const int h = metrics.height;
+  if (w <= 0 || h <= 0) return;
+
+  const int limit = w < h ? w : h;
+  for (int gy = 0; gy < h; gy++) {
+    for (int gx = 0; gx < w; gx++) {
+      const int diamondX = abs((2 * gx + 1) - w);
+      const int diamondY = abs((2 * gy + 1) - h);
+      if (diamondX + diamondY <= limit) {
+        drawPixelClipped(renderer, baseX - gy, baseY + gx, pixelState);
+      }
+    }
+  }
+
+  if (w < 7 || h < 9) return;
+  const int qW = w > 10 ? 7 : 5;
+  const int qH = h > 12 ? 9 : 7;
+  const int qLeft = (w - qW) / 2;
+  const int qTop = (h - qH) / 2;
+  for (int gy = 0; gy < qH; gy++) {
+    for (int gx = 0; gx < qW; gx++) {
+      if (questionTemplatePixel(gx * 7 / qW, gy * 9 / qH)) {
+        drawPixelClipped(renderer, baseX - (qTop + gy), baseY + qLeft + gx, !pixelState);
       }
     }
   }
@@ -847,6 +899,30 @@ static void renderCharSmallCaps(const GfxRenderer& renderer, GfxRenderer::Render
   }
 }
 
+static void drawSyntheticGreekGlyphSideways(const GfxRenderer& renderer, const SyntheticSolidGlyphMetrics& metrics,
+                                           const uint32_t cp, const int lineHeight, const int cursorX,
+                                           const int cursorY, const bool pixelState) {
+  const int baseX = cursorX + lineHeight - 1 - metrics.ascender + metrics.top;
+  const int baseY = cursorY + metrics.left;
+  const int s = syntheticStroke(metrics);
+  for (int gy = 0; gy < metrics.height; gy++) {
+    for (int gx = 0; gx < metrics.width; gx++) {
+      bool draw = false;
+      if (cp == syntheticGlyph::GREEK_CAPITAL_GAMMA) {
+        draw = gx < s || gy < s;
+      } else if (cp == syntheticGlyph::GREEK_SMALL_EPSILON) {
+        draw = epsilonTemplatePixel(gx * 7 / metrics.width, gy * 7 / metrics.height);
+      } else if (cp == syntheticGlyph::GREEK_SMALL_OMEGA) {
+        draw = (gx < s && gy >= s && gy < metrics.height - s) ||
+               (gx >= metrics.width - s && gy >= s && gy < metrics.height - s) ||
+               (gy >= metrics.height - s && gx >= s && gx < metrics.width - s) ||
+               (gx >= metrics.width / 2 - s / 2 && gx < metrics.width / 2 - s / 2 + s && gy >= metrics.height / 2);
+      }
+      if (draw) drawPixelClipped(renderer, baseX - gy, baseY + gx, pixelState);
+    }
+  }
+}
+
 template <TextRotation rotation = TextRotation::None>
 static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode renderMode,
                            const EpdFontFamily& fontFamily, const uint32_t cp, int cursorX, int cursorY,
@@ -874,6 +950,12 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
     if (!renderer.glyphIntersectsStrip(ob, ib - (width - 1), ob + height - 1, ib)) {
       return;
     }
+  } else if constexpr (rotation == TextRotation::Sideways) {
+    const int ob = cursorX + fontData->advanceY - 1 - fontData->ascender + top;
+    const int ib = cursorY + left;
+    if (!renderer.glyphIntersectsStrip(ob - (height - 1), ib, ob, ib + (width - 1))) {
+      return;
+    }
   } else {
     const int gx0 = cursorX + left;
     const int gy0 = cursorY - top;
@@ -887,10 +969,19 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
   if (bitmap != nullptr) {
     // For Normal:  outer loop advances screenY, inner loop advances screenX
     // For Rotated: outer loop advances screenX, inner loop advances screenY (in reverse)
+    // Both step constants fold away at compile time. They exist so the two
+    // rotated directions share one pair of pixel loops.
+    [[maybe_unused]] constexpr int outerStep = (rotation == TextRotation::Sideways) ? -1 : 1;
+    [[maybe_unused]] constexpr int innerStep = (rotation == TextRotation::Rotated90CW) ? -1 : 1;
     int outerBase, innerBase;
     if constexpr (rotation == TextRotation::Rotated90CW) {
       outerBase = cursorX + fontData->ascender - top;  // screenX = outerBase + glyphY
       innerBase = cursorY - left;                      // screenY = innerBase - glyphX
+    } else if constexpr (rotation == TextRotation::Sideways) {
+      // Mirror of the Rotated90CW placement within the same advanceY-wide band,
+      // so a sideways run sits in the column the upright glyphs occupy.
+      outerBase = cursorX + fontData->advanceY - 1 - fontData->ascender + top;  // screenX = outerBase - glyphY
+      innerBase = cursorY + left;                                               // screenY = innerBase + glyphX
     } else {
       outerBase = cursorY - top;   // screenY = outerBase + glyphY
       innerBase = cursorX + left;  // screenX = innerBase + glyphX
@@ -899,12 +990,12 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
     if (is2Bit) {
       int pixelPosition = 0;
       for (int glyphY = 0; glyphY < height; glyphY++) {
-        const int outerCoord = outerBase + glyphY;
+        const int outerCoord = outerBase + outerStep * glyphY;
         for (int glyphX = 0; glyphX < width; glyphX++, pixelPosition++) {
           int screenX, screenY;
-          if constexpr (rotation == TextRotation::Rotated90CW) {
+          if constexpr (rotation != TextRotation::None) {
             screenX = outerCoord;
-            screenY = innerBase - glyphX;
+            screenY = innerBase + innerStep * glyphX;
           } else {
             screenX = innerBase + glyphX;
             screenY = outerCoord;
@@ -939,12 +1030,12 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
       }
       int pixelPosition = 0;
       for (int glyphY = 0; glyphY < height; glyphY++) {
-        const int outerCoord = outerBase + glyphY;
+        const int outerCoord = outerBase + outerStep * glyphY;
         for (int glyphX = 0; glyphX < width; glyphX++, pixelPosition++) {
           int screenX, screenY;
-          if constexpr (rotation == TextRotation::Rotated90CW) {
+          if constexpr (rotation != TextRotation::None) {
             screenX = outerCoord;
-            screenY = innerBase - glyphX;
+            screenY = innerBase + innerStep * glyphX;
           } else {
             screenX = innerBase + glyphX;
             screenY = outerCoord;
@@ -3019,6 +3110,23 @@ int GfxRenderer::getTextHeight(const int fontId) const {
 
 void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y, const char* text, const bool black,
                                       const EpdFontFamily::Style style) const {
+  drawRotatedRun(fontId, x, y, text, black, style, /*sideways=*/false);
+}
+
+// Japanese vertical text: Latin runs turned clockwise, reading top to bottom.
+// `y` is the top of the run because it grows downward, unlike drawTextRotated90CW
+// where `y` is the bottom because that one runs upward.
+void GfxRenderer::drawTextSideways(const int fontId, const int x, const int y, const char* text, const bool black,
+                                   const EpdFontFamily::Style style) const {
+  drawRotatedRun(fontId, x, y, text, black, style, /*sideways=*/true);
+}
+
+// The two directions are mirror images: Rotated90CW walks the run toward smaller y
+// with glyph tops to the left, Sideways toward larger y with glyph tops to the
+// right. Kerning, ligatures, combining marks and synthetic fallbacks are shared so
+// the two cannot drift apart.
+void GfxRenderer::drawRotatedRun(const int fontId, const int x, const int y, const char* text, const bool black,
+                                 const EpdFontFamily::Style style, const bool sideways) const {
   // Cannot draw a NULL / empty string
   if (text == nullptr || *text == '\0') {
     return;
@@ -3033,6 +3141,9 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
   }
 
   const auto& font = fontIt->second;
+  const EpdFontData* fontData = font.getData(style);
+  const int lineHeight = fontData ? fontData->advanceY : 0;
+  const int advanceSign = sideways ? 1 : -1;
 
   int lastBaseY = y;
   int lastBaseLeft = 0;
@@ -3056,10 +3167,20 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
       const auto anchor = combiningMark::anchorFor(cp);
       const int raiseBy =
           combiningMark::raiseAboveBase(anchor, combiningGlyph->top, combiningGlyph->height, lastBaseTop);
-      const int combiningX = x - raiseBy;
-      const int combiningY = combiningMark::anchorOverRotated90CW(anchor, lastBaseY, lastBaseLeft, lastBaseWidth,
-                                                                  combiningGlyph->left, combiningGlyph->width);
-      renderCharImpl<TextRotation::Rotated90CW>(*this, renderMode, font, cp, combiningX, combiningY, black, style);
+      // Text-up is screen-left when turned counter-clockwise and screen-right
+      // when turned clockwise, so raising a mark moves x the other way. The
+      // clockwise placement puts `left` back on the same sign as unrotated
+      // text, which is why it reuses plain anchorOver().
+      const int combiningX = x + advanceSign * raiseBy;
+      if (sideways) {
+        const int combiningY = combiningMark::anchorOver(anchor, lastBaseY, lastBaseLeft, lastBaseWidth,
+                                                         combiningGlyph->left, combiningGlyph->width);
+        renderCharImpl<TextRotation::Sideways>(*this, renderMode, font, cp, combiningX, combiningY, black, style);
+      } else {
+        const int combiningY = combiningMark::anchorOverRotated90CW(anchor, lastBaseY, lastBaseLeft, lastBaseWidth,
+                                                                    combiningGlyph->left, combiningGlyph->width);
+        renderCharImpl<TextRotation::Rotated90CW>(*this, renderMode, font, cp, combiningX, combiningY, black, style);
+      }
       continue;
     }
 
@@ -3071,7 +3192,7 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
     // subtracting for the rotated coordinate direction.
     if (prevCp != 0) {
       const auto kernFP = font.getKerning(prevCp, cp, style);  // 4.4 fixed-point kern
-      lastBaseY -= fp4::toPixel(prevAdvanceFP + kernFP);       // snap 12.4 fixed-point to nearest pixel
+      lastBaseY += advanceSign * fp4::toPixel(prevAdvanceFP + kernFP);  // snap 12.4 fixed-point to nearest pixel
     }
 
     if (!hasRealGlyph && syntheticGlyph::isSpaceFallback(cp)) {
@@ -3085,7 +3206,11 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
 
     if (!hasRealGlyph && syntheticGlyph::isSolid(cp)) {
       const auto metrics = getSyntheticSolidGlyphMetrics(font, style, cp);
-      fillSyntheticSolidGlyphRotated90CW(*this, metrics, x, lastBaseY, black);
+      if (sideways) {
+        fillSyntheticSolidGlyphSideways(*this, metrics, lineHeight, x, lastBaseY, black);
+      } else {
+        fillSyntheticSolidGlyphRotated90CW(*this, metrics, x, lastBaseY, black);
+      }
       lastBaseLeft = metrics.left;
       lastBaseWidth = metrics.width;
       lastBaseTop = metrics.top;
@@ -3096,7 +3221,11 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
 
     if (!hasRealGlyph && syntheticGlyph::isGreekFallback(cp)) {
       const auto metrics = getSyntheticGreekGlyphMetrics(font, style, cp);
-      drawSyntheticGreekGlyphRotated90CW(*this, metrics, cp, x, lastBaseY, black);
+      if (sideways) {
+        drawSyntheticGreekGlyphSideways(*this, metrics, cp, lineHeight, x, lastBaseY, black);
+      } else {
+        drawSyntheticGreekGlyphRotated90CW(*this, metrics, cp, x, lastBaseY, black);
+      }
       lastBaseLeft = metrics.left;
       lastBaseWidth = metrics.width;
       lastBaseTop = metrics.top;
@@ -3107,7 +3236,11 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
 
     if (!hasRealGlyph && syntheticGlyph::isReplacementFallback(cp)) {
       const auto metrics = getSyntheticReplacementGlyphMetrics(font, style);
-      drawSyntheticReplacementGlyphRotated90CW(*this, metrics, x, lastBaseY, black);
+      if (sideways) {
+        drawSyntheticReplacementGlyphSideways(*this, metrics, lineHeight, x, lastBaseY, black);
+      } else {
+        drawSyntheticReplacementGlyphRotated90CW(*this, metrics, x, lastBaseY, black);
+      }
       lastBaseLeft = metrics.left;
       lastBaseWidth = metrics.width;
       lastBaseTop = metrics.top;
@@ -3134,7 +3267,11 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
     lastBaseTop = glyph->top;
     prevAdvanceFP = glyph->advanceX;  // 12.4 fixed-point
 
-    renderCharImpl<TextRotation::Rotated90CW>(*this, renderMode, font, cp, x, lastBaseY, black, style);
+    if (sideways) {
+      renderCharImpl<TextRotation::Sideways>(*this, renderMode, font, cp, x, lastBaseY, black, style);
+    } else {
+      renderCharImpl<TextRotation::Rotated90CW>(*this, renderMode, font, cp, x, lastBaseY, black, style);
+    }
     prevCp = cp;
   }
 }
@@ -3381,8 +3518,10 @@ void GfxRenderer::drawTextVertical(const int fontId, const int x, const int y, c
     }
 
     if (sidewaysStart) {
-      // 欧文は 90° 回して縦に流す。drawTextRotated90CW は上へ進むので、
-      // 区間の長さぶん下から描き始めて結果的に上から下へ並ぶようにする。
+      // 欧文は時計回りに 90° 寝かせて、上から下へ流す（CSS の
+      // text-orientation: sideways）。drawTextRotated90CW は名前に反して
+      // 反時計回りで下から上へ進むので、これを使うと「100」が字の向きも並び順も
+      // 逆になる。実機で最初に見つかった不具合がこれ。
       // 幅の測定は横組みとして行う（縦組みモードのままだと getTextAdvanceX が
       // この関数へ転送されて無限再帰になる）。
       forEachSidewaysChunk(sidewaysStart, charStart, [&](const char* chunk) {
@@ -3391,7 +3530,7 @@ void GfxRenderer::drawTextVertical(const int fontId, const int x, const int y, c
           const VerticalTextScope horizontal(*this, false);
           chunkWidth = getTextAdvanceX(resolvedFontId, chunk, style);
         }
-        drawTextRotated90CW(resolvedFontId, x, yPos + chunkWidth, chunk, black, style);
+        drawTextSideways(resolvedFontId, x, yPos, chunk, black, style);
         yPos += chunkWidth;
       });
       sidewaysStart = nullptr;
