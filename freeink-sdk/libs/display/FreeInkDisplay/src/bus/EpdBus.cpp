@@ -1,11 +1,15 @@
 #include "EpdBus.h"
 
+#include <BoardConfig.h>
 #include <driver/gpio.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 
 #if FREEINK_DEVICE_PAPERMONO
 #include <PaperMonoBoard.h>
+#endif
+#if FREEINK_DEVICE_WS397
+#include <Axp2101.h>
 #endif
 
 // Consumer escape hatch for boards whose EPD power/reset live behind glue the
@@ -22,12 +26,14 @@ namespace {
 void boardEpdPower(bool enabled) {
 #if FREEINK_DEVICE_PAPERMONO
   freeink::papermono::setEpdPower(enabled);
+#elif FREEINK_DEVICE_WS397
+  freeink::axp2101::setEpdPower(enabled);  // ALDO3, not a GPIO
 #else
   if (freeink_board_epd_power) freeink_board_epd_power(enabled);
 #endif
 }
 bool boardEpdPowerAvailable() {
-#if FREEINK_DEVICE_PAPERMONO
+#if FREEINK_DEVICE_PAPERMONO || FREEINK_DEVICE_WS397
   return true;
 #else
   return freeink_board_epd_power != nullptr;
@@ -109,6 +115,17 @@ void EpdBus::begin(const EpdPins& pins, uint32_t spiHz, BusyPolarity busy, int8_
 }
 
 void EpdBus::reset(uint16_t extraSettleMs) {
+  if (BoardConfig::isOnePage()) {
+    // OnePage shares GPIO27 between EPD reset and the SD/MIC power rail.
+    // Pulsing it low after Storage.begin() cuts power to the mounted SD card,
+    // causing subsequent SD reads to fail. Keep the rail powered; SSD1677
+    // performs CMD_SOFT_RESET immediately after.
+    if (_pins.rst >= 0) {
+      digitalWrite(_pins.rst, HIGH);
+    }
+    return;
+  }
+
   const auto setReset = [this](bool high) {
     if (_pins.rst >= 0) {
       digitalWrite(_pins.rst, high ? HIGH : LOW);
@@ -312,6 +329,20 @@ void EpdBus::waitRefreshComplete(const char* tag) {
   // slice hook already delivers GPIO-precise wake, so the ISR path buys these hosts
   // nothing — fall back to the hooked poll.
   if (_busyWaitSliceHook != nullptr) {
+    // Refresh-completion context: BUSY assertion can trail MASTER_ACTIVATION
+    // by a few microseconds, and the ActiveHigh polled path (unlike ActiveLow's
+    // 100 ms grace loop, or the ISR path's 20 ms edge wait below) would fall
+    // through immediately — returning mid-waveform, after which single-buffer
+    // drivers rewrite controller RAM while the panel is still driving. Give
+    // the poll the same bounded grace here, in the refresh-only context, so
+    // waitBusy() itself (which also serves command waits where BUSY may never
+    // assert) stays untouched for every other caller.
+    if (_busy == BusyPolarity::ActiveHigh) {
+      const unsigned long graceStart = millis();
+      while (digitalRead(_pins.busy) != HIGH && millis() - graceStart < 20) {
+        delayMicroseconds(200);
+      }
+    }
     waitBusy(tag);
     return;
   }

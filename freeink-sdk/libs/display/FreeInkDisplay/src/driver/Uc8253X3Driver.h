@@ -30,10 +30,10 @@ struct Uc8253LutBank {
 };
 
 struct Uc8253X3Config {
-  Uc8253LutBank normal;  // condition-pass / settle (CDI 0xA9)
-  Uc8253LutBank half;    // scrub (CDI 0xA9)
-  Uc8253LutBank fast;    // turbo differential (CDI 0x29)
-  Uc8253LutBank full;    // OEM full / factory (CDI 0x29)
+  Uc8253LutBank normal;    // condition-pass / settle (CDI 0xA9)
+  Uc8253LutBank half;      // scrub (CDI 0xA9)
+  Uc8253LutBank fast;      // turbo differential (CDI 0x29)
+  Uc8253LutBank full;      // OEM full / factory (CDI 0x29)
   Uc8253LutBank gc;        // OEM 4-level grayscale nudge (CDI 0x29)
   Uc8253LutBank preBwMid;  // OEM grayscale preconditioning settle (CDI 0xA9)
   uint8_t lutLen;          // bytes per LUT sent to the controller (42)
@@ -61,9 +61,12 @@ class Uc8253X3Driver : public PanelDriver {
   void displayFinish(EpdBus& bus, const uint8_t* fb) override;
   bool supportsAsyncDisplay() const override { return true; }
 
-  bool supportsStripGrayscale() const override { return true; }
   void displayGrayscaleBase(EpdBus& bus, const uint8_t* fb, RefreshMode fallback, bool turnOff) override;
   void preconditionGrayscale(EpdBus& bus, uint16_t x, uint16_t y, uint16_t w, uint16_t h) override;
+  GrayscaleCapabilities grayscaleCapabilities(GrayscaleMode mode = GrayscaleMode::Overlay) const override {
+    if (mode != GrayscaleMode::Overlay) return {};
+    return {GrayscaleEncoding::OverlayMasks, GrayscaleBase::Separate, true, false, false};
+  }
   void copyGrayscaleLsb(EpdBus& bus, const uint8_t* lsb) override;
   void copyGrayscaleMsb(EpdBus& bus, const uint8_t* msb) override;
   void writeGrayscalePlaneStrip(EpdBus& bus, GrayPlane plane, const uint8_t* rows, uint16_t yStart,
@@ -74,10 +77,6 @@ class Uc8253X3Driver : public PanelDriver {
 
   void requestResync(uint8_t settlePasses) override;
   void skipInitialResync() override;
-  // Inverted (dark-background) content: fast refreshes rewrite DTM1 ("old")
-  // as the complement of the target so every pixel is re-driven toward its
-  // target each update. See displayStart().
-  void setBackgroundHint(bool darkBackground) override { _darkBackground = darkBackground; }
 
  private:
   void initController(EpdBus& bus);
@@ -95,7 +94,6 @@ class Uc8253X3Driver : public PanelDriver {
   bool _isScreenOn = false;
   bool _redRamSynced = false;
   bool _inGrayscaleMode = false;
-  bool _darkBackground = false;
   uint8_t _initialFullSyncsRemaining = 0;
   bool _forceFullSyncNext = false;
   uint8_t _forcedConditionPassesNext = 0;
