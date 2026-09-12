@@ -543,7 +543,7 @@ void SettingsActivity::openLanguagePicker() {
   const auto* it = std::find(begin, end, currentLang);
   int currentIndex = (it != end) ? static_cast<int>(std::distance(begin, it)) : 0;
 
-  optionPopup.show(StrId::STR_LANGUAGE, options, currentIndex, [this](int selectedIndex) {
+  optionPopup.show(StrId::STR_LANGUAGE, options, currentIndex, [this, currentLang](int selectedIndex) {
     const int languageCount = static_cast<int>(getLanguageCount());
     if (selectedIndex < 0 || selectedIndex >= languageCount) {
       requestUpdate();
@@ -558,6 +558,24 @@ void SettingsActivity::openLanguagePicker() {
 
     SETTINGS.language = langIndex;
     SETTINGS.saveToFile();
+
+    // Picking Japanese is the one moment where we know the reader's language convention, so it is
+    // the one moment where offering vertical writing costs them nothing. We ask instead of switching
+    // silently: the writing mode stays something the reader chose, not something the language did.
+    const bool switchedToJapanese = langIndex != currentLang && static_cast<Language>(langIndex) == Language::JA;
+    if (switchedToJapanese && SETTINGS.writingMode != CrossPointSettings::WM_VERTICAL) {
+      startActivityForResult(makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, tr(STR_WRITING_MODE),
+                                                                     tr(STR_WRITING_MODE_JA_PROMPT)),
+                             [this](const ActivityResult& result) {
+                               if (!result.isCancelled) {
+                                 SETTINGS.writingMode = CrossPointSettings::WM_VERTICAL;
+                                 SETTINGS.saveToFile();
+                               }
+                               requestUpdate();
+                             });
+      return;
+    }
+
     requestUpdate();
   });
   requestUpdate();
