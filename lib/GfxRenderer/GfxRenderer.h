@@ -211,6 +211,9 @@ class GfxRenderer {
   // Register/clear size-matched CJK UI fallbacks (see fallbackFontMap_).
   // setFallbackFont maps a primary UI font id to an SD font id of the same size.
   void setFallbackFont(int primaryFontId, int fallbackFontId) { fallbackFontMap_[primaryFontId] = fallbackFontId; }
+  // UIのCJKフォールバックが1つでも登録されているか。ネットワーク処理が
+  // SDフォントを解放するとここが空になり、UIの日本語が全部豆腐になる。
+  bool hasFallbackFonts() const { return !fallbackFontMap_.empty(); }
   void clearFallbackFonts() {
     fallbackFontMap_.clear();
     lastFallbackPrewarmFontId_ = 0;

@@ -235,6 +235,16 @@ void SdCardFontSystem::releaseForNetwork(GfxRenderer& renderer) {
   registryDirty_.store(true, std::memory_order_release);
 }
 
+void SdCardFontSystem::ensureUiFallbacks(GfxRenderer& renderer) {
+  // ネットワーク処理は無線用にヒープを空けるため SDフォントを解放し、その際に
+  // UIのCJKフォールバックも消える（SdCardFontManager::unloadAll)。復旧は各
+  // 呼び出し側任せで、抜けがあると本を開くか再起動するまでUIの日本語が全部
+  // 豆腐のままになる。画面遷移のたびにここで拾い直す。
+  if (renderer.hasFallbackFonts()) return;          // 生きている
+  if (SETTINGS.sdFontFamilyName[0] == ' ') return;  // SDフォントを使っていない
+  ensureLoaded(renderer);                           // 本文フォントごと読み直す。fallback もここで登録される
+}
+
 void SdCardFontSystem::setupUiFallbacks(GfxRenderer& renderer) {
   // ここが素通りすると、UIの日本語・中国語・韓国語が全部豆腐になる。
   // 黙って return すると原因が追えないので、どの条件で降りたかを残す。
