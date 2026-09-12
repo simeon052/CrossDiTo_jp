@@ -355,6 +355,10 @@ enum class Board : uint8_t {
   Sticky,
   PaperMono,
   M5PaperS3,  // ESP32-S3 sibling of M5Paper v1.1: same ED047TC1 glass, no IT8951 — raw parallel via LovyanGFX
+  // 上流の表示ライブラリ（Ssd1677Driver）が分岐先として参照する。こちらは
+  // この機種のボード定義を取り込んでいないので、コンパイルを通すための値。
+  // ボード定義まで上流に揃えるときに実体を持たせること。
+  WsEpaper397,
 };
 
 // How the board reports button presses.
