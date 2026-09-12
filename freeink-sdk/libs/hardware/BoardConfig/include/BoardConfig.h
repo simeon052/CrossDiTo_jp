@@ -1629,6 +1629,9 @@ inline bool isX4Pro() { return ACTIVE.board == Board::XteinkX4Pro; }
 // 上流の display ライブラリが参照する。取り込んでいるボード集合に OnePage は
 // 無いので常に false。ボード定義まで上流に揃えるときに本来の判定へ戻すこと。
 inline bool isOnePage() { return false; }
+// 同上。X4 Classic も取り込んでいない。false を返すと X4 Pro の経路
+// （PLL を programming する）になり、この機では正しい。
+inline bool isX4Classic() { return false; }
 inline bool isPaperMono() { return ACTIVE.board == Board::PaperMono; }
 inline bool hasTouch() { return ACTIVE.touch.controller != TouchController::None; }
 inline bool hasHomeKey() { return ACTIVE.touch.hasHomeKey; }
