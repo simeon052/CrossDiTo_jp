@@ -107,17 +107,6 @@ jobs:
           path: .pio/build/x4-pro/CrossDiTo-*.bin
           if-no-files-found: error
 
-      # 一時的。実機確認が終わったら消す。
-      - name: Build CrossDiTo debug for X4 Pro
-        run: pio run -e x4-pro-debug
-
-      - name: Upload debug firmware
-        uses: actions/upload-artifact@v7
-        with:
-          name: CrossDiTo-x4-pro-debug
-          path: .pio/build/x4-pro-debug/firmware.bin
-          if-no-files-found: error
-
 
   # 縦組みは「コンパイルが通った」では何も確認できない。シミュレータを
   # headless で走らせて、実際に描かれた画面を成果物として持ち帰る。
