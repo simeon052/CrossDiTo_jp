@@ -413,7 +413,7 @@ bool Section::createSectionFile(const ReaderRenderSpec& spec, const std::functio
                                 const SectionBuildOptions buildOptions) {
   // 縦組みでは行分割を縦の送りで測る。ここで囲っておけば、レイアウトエンジンの
   // 測定呼び出しは書き換えずに済む（GfxRenderer::VerticalTextScope 参照）。
-  const GfxRenderer::VerticalTextScope verticalScope(renderer, spec.verticalWriting);
+  const GfxRenderer::VerticalTextScope verticalScope(renderer, spec.verticalWriting, spec.verticalCharSpacing);
   const int fontId = spec.fontId;
   const float lineCompression = spec.lineCompression;
   const bool extraParagraphSpacing = spec.extraParagraphSpacing;
@@ -818,7 +818,7 @@ bool Section::createSectionFile(const ReaderRenderSpec& spec, const std::functio
 
 bool Section::startBuild(const ReaderRenderSpec& spec, const SectionBuildOptions buildOptions,
                          const std::function<void()>& popupFn) {
-  const GfxRenderer::VerticalTextScope verticalScope(renderer, spec.verticalWriting);
+  const GfxRenderer::VerticalTextScope verticalScope(renderer, spec.verticalWriting, spec.verticalCharSpacing);
   const int fontId = spec.fontId;
   const float lineCompression = spec.lineCompression;
   const bool extraParagraphSpacing = spec.extraParagraphSpacing;
@@ -942,6 +942,7 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const SectionBuildOptions
     return false;
   }
   ctx->verticalWriting = spec.verticalWriting;
+  ctx->verticalCharSpacing = spec.verticalCharSpacing;
   ctx->lutCapacity = INITIAL_SECTION_PAGE_LUT_ENTRIES;
   ctx->lut = makeUniqueNoThrow<Section::PageLutEntry[]>(ctx->lutCapacity);
   if (!ctx->lut) {
@@ -1051,8 +1052,8 @@ bool Section::buildSomeMore(const int maxPages) {
     LOG_ERR("SCT", "buildSomeMore called with no active build");
     return false;
   }
-  // 続きを組むときも、始めたときと同じ組み方向で測る。
-  const GfxRenderer::VerticalTextScope verticalScope(renderer, build_->verticalWriting);
+  // 続きを組むときも、始めたときと同じ組み方向・同じ字間で測る。
+  const GfxRenderer::VerticalTextScope verticalScope(renderer, build_->verticalWriting, build_->verticalCharSpacing);
   // Pace on pages laid out by THIS build, not pageCount: during a rebuild over a partial,
   // pageCount stays pinned at the partial's watermark until the build passes it, which
   // would otherwise turn one "small" chunk into a blocking rebuild of the whole watermark.

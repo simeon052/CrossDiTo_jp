@@ -152,7 +152,7 @@ class GfxRenderer {
   // 測定と描画で判断が食い違うと位置がずれるので、両方からこれを呼ぶ。
   static bool verticalTakesOwnCell(uint32_t cp, SdCardFont* sdFont, EpdFontFamily::Style style);
   // 縦組みの字間（em に対する%）。既定は 0 で、横組みの挙動には影響しない。
-  uint8_t verticalCharSpacingPercent_ = 0;
+  mutable uint8_t verticalCharSpacingPercent_ = 0;
   // VerticalTextScope が出し入れする。const メソッドである測定・描画から
   // 触るので mutable（fontCacheManager_ と同じ割り切り）。
   mutable bool verticalTextMode_ = false;
@@ -370,7 +370,7 @@ class GfxRenderer {
   // 横組みでの getTextAdvanceX() に対応する。
   int getTextAdvanceVertical(int fontId, const char* text, EpdFontFamily::Style style) const;
   // 縦組みの字間。em に対する百分率で、0-30 に丸める。
-  void setVerticalCharSpacing(const uint8_t percent) { verticalCharSpacingPercent_ = percent > 30 ? 30 : percent; }
+  void setVerticalCharSpacing(const uint8_t percent) const { verticalCharSpacingPercent_ = percent > 30 ? 30 : percent; }
   uint8_t getVerticalCharSpacing() const { return verticalCharSpacingPercent_; }
 
   // 縦組みモード。立っている間だけ getTextAdvanceX() が縦の送りを返すので、
@@ -391,24 +391,38 @@ class GfxRenderer {
     const GfxRenderer& renderer_;
     const bool previousMode_;
     const VerticalPageTransform previousTransform_;
+    const uint8_t previousCharSpacing_;
 
    public:
+    // 字間を指定しないときの印。現在値をそのまま使う（内部で組み方向だけを
+    // 一時的に倒すスコープが、字間まで巻き込まないようにするため）。
+    static constexpr int KEEP_CHAR_SPACING = -1;
+
     // 紙面を伴わない版（組版の測定だけ縦にしたいとき）。デフォルト引数の
     // `= {}` は、この時点で VerticalPageTransform が不完全型として扱われる
     // ため GCC が受け付けない。委譲コンストラクタで代替している。
-    VerticalTextScope(const GfxRenderer& renderer, const bool vertical)
-        : VerticalTextScope(renderer, vertical, VerticalPageTransform()) {}
+    VerticalTextScope(const GfxRenderer& renderer, const bool vertical,
+                      const int charSpacingPercent = KEEP_CHAR_SPACING)
+        : VerticalTextScope(renderer, vertical, VerticalPageTransform(), charSpacingPercent) {}
 
-    VerticalTextScope(const GfxRenderer& renderer, const bool vertical, const VerticalPageTransform& transform)
+    // 字間はスコープが出し入れする。組版と描画で別々に設定していたころは、
+    // 設定を変えても組版には前の値が残り、字間を変えても画面が変わらなかった。
+    VerticalTextScope(const GfxRenderer& renderer, const bool vertical, const VerticalPageTransform& transform,
+                      const int charSpacingPercent = KEEP_CHAR_SPACING)
         : renderer_(renderer),
           previousMode_(renderer.verticalTextMode_),
-          previousTransform_(renderer.verticalPageTransform_) {
+          previousTransform_(renderer.verticalPageTransform_),
+          previousCharSpacing_(renderer.verticalCharSpacingPercent_) {
       renderer_.verticalTextMode_ = vertical;
       renderer_.verticalPageTransform_ = transform;
+      if (charSpacingPercent >= 0) {
+        renderer_.setVerticalCharSpacing(static_cast<uint8_t>(charSpacingPercent));
+      }
     }
     ~VerticalTextScope() {
       renderer_.verticalTextMode_ = previousMode_;
       renderer_.verticalPageTransform_ = previousTransform_;
+      renderer_.verticalCharSpacingPercent_ = previousCharSpacing_;
     }
     VerticalTextScope(const VerticalTextScope&) = delete;
     VerticalTextScope& operator=(const VerticalTextScope&) = delete;
