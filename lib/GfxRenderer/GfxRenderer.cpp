@@ -3423,9 +3423,14 @@ SdCardFont* GfxRenderer::vertCapableSdFont(const int resolvedFontId, const EpdFo
 }
 
 bool GfxRenderer::verticalTakesOwnCell(const uint32_t cp, SdCardFont* sdFont, const EpdFontFamily::Style style) {
+  // 回すべき文字を先に見る。isUprightInVertical を先に通すと、CJK や全角の
+  // 範囲に入る括弧類が無条件に立ってしまい、vert 字形を持たないフォントでは
+  // 回転しないまま残る（＜＞ が実機でそうなっていた）。
+  // 字形があればその形で立て、無ければ寝かせて縦向きに見せる。
+  if (VerticalTextUtils::needsRotatedFormInVertical(cp)) {
+    return sdFont != nullptr && sdFont->getVertGlyph(cp, static_cast<uint8_t>(style)) != nullptr;
+  }
   if (VerticalTextUtils::isUprightInVertical(cp)) return true;
-  // ダッシュや三点リーダは、縦用字形があればそれを使う（縦棒・縦の点になる）。
-  // 無ければ寝かせたほうが縦線として見えるので、字形の有無で決める。
   if (!sdFont || !VerticalTextUtils::shouldUseVertGlyph(cp)) return false;
   return sdFont->getVertGlyph(cp, static_cast<uint8_t>(style)) != nullptr;
 }
@@ -3503,6 +3508,12 @@ void GfxRenderer::drawTextVertical(const int fontId, const int x, const int y, c
   // vert 字形を持つSDフォントなら、この場で読み込む（読み込み済みなら何もしない）。
   SdCardFont* sdFont = vertCapableSdFont(resolvedFontId, style);
 
+  // 全角1文字ぶんのセル幅。寝かせた欧文を全角文字と同じ軸に載せるのに使う。
+  // 「あ」で測るのは、この経路のフォントが常にCJKを持つため。
+  // 「あ」を持たないフォント（ラテン専用）では 0 が返る。その場合はずらさない。
+  const int probedCell = verticalCharCellSize(resolvedFontId, 0x3042, style);
+  const int fullWidthCell = probedCell > 0 ? probedCell : (fontData ? fontData->advanceY : 0);
+
   int yPos = y;
   const char* p = text;
   const char* sidewaysStart = nullptr;
@@ -3524,13 +3535,16 @@ void GfxRenderer::drawTextVertical(const int fontId, const int x, const int y, c
       // 逆になる。実機で最初に見つかった不具合がこれ。
       // 幅の測定は横組みとして行う（縦組みモードのままだと getTextAdvanceX が
       // この関数へ転送されて無限再帰になる）。
+      // 寝かせた語は advanceY 幅の帯に収まる。全角セルより帯のほうが広いので、
+      // 帯の左端を x に合わせると全角文字より右へ寄る。中心どうしを合わせる。
+      const int sidewaysX = x + (fullWidthCell - fontData->advanceY) / 2;
       forEachSidewaysChunk(sidewaysStart, charStart, [&](const char* chunk) {
         int chunkWidth = 0;
         {
           const VerticalTextScope horizontal(*this, false);
           chunkWidth = getTextAdvanceX(resolvedFontId, chunk, style);
         }
-        drawTextSideways(resolvedFontId, x, yPos, chunk, black, style);
+        drawTextSideways(resolvedFontId, sidewaysX, yPos, chunk, black, style);
         yPos += chunkWidth;
       });
       sidewaysStart = nullptr;
