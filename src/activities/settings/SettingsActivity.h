@@ -295,6 +295,10 @@ class SettingsActivity final : public Activity {
   void openStringEditor(const SettingInfo& setting);
   void rebuildSettingsLists();
   void syncQuickResumeTimeoutForSleepScreen(bool sleepScreenChanged, bool quickResumeTimeoutChanged);
+  // 縦書きに切り替えたとき、行間が既定のままなら縦組み向けの値へ上げる。
+  // 触ったことのある値は動かさない。ページレイアウトでは行間が組み方向の
+  // すぐ下に並ぶので、変わったことがその場で見える。
+  void syncLineSpacingForWritingMode(bool writingModeChanged);
 
  public:
   explicit SettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, bool dismissOnUpSwipe = false);

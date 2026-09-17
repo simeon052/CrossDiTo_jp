@@ -489,6 +489,7 @@ void SettingsActivity::openEnumOptionPicker(const SettingInfo& setting) {
     const bool sleepScreenChanged = selectedSetting.valuePtr == &CrossPointSettings::sleepScreen;
     const bool quickResumeTimeoutChanged = selectedSetting.valuePtr == &CrossPointSettings::quickResumeSleepScreen;
     syncQuickResumeTimeoutForSleepScreen(sleepScreenChanged, quickResumeTimeoutChanged);
+    syncLineSpacingForWritingMode(selectedSetting.valuePtr == &CrossPointSettings::writingMode);
     SETTINGS.saveToFile();
     rebuildSettingsLists();
     requestUpdate();
@@ -569,7 +570,9 @@ void SettingsActivity::openLanguagePicker() {
                              [this](const ActivityResult& result) {
                                if (!result.isCancelled) {
                                  SETTINGS.writingMode = CrossPointSettings::WM_VERTICAL;
+                                 syncLineSpacingForWritingMode(true);
                                  SETTINGS.saveToFile();
+                                 rebuildSettingsLists();
                                }
                                requestUpdate();
                              });
@@ -1034,12 +1037,22 @@ void SettingsActivity::toggleCurrentSetting() {
   }
 
   syncQuickResumeTimeoutForSleepScreen(sleepScreenChanged, quickResumeTimeoutChanged);
+  syncLineSpacingForWritingMode(setting.valuePtr == &CrossPointSettings::writingMode);
   SETTINGS.saveToFile();
   // Apply this while `setting` still refers to the current list; rebuilding
   // below clears its backing vector and invalidates the reference.
   applyUiSettingChange(setting.valuePtr);
   rebuildSettingsLists();
   selectedSettingIndex = std::min(selectedSettingIndex, settingsCount);
+}
+
+void SettingsActivity::syncLineSpacingForWritingMode(const bool writingModeChanged) {
+  if (!writingModeChanged) return;
+  if (SETTINGS.writingMode != CrossPointSettings::WM_VERTICAL) return;
+  if (SETTINGS.lineHeightPercent != CrossPointSettings::DEFAULT_LINE_HEIGHT_PERCENT) return;
+  SETTINGS.lineHeightPercent = CrossPointSettings::VERTICAL_LINE_HEIGHT_PERCENT;
+  LOG_INF("SET", "Vertical writing: line spacing raised from default to %u%%",
+          CrossPointSettings::VERTICAL_LINE_HEIGHT_PERCENT);
 }
 
 void SettingsActivity::syncQuickResumeTimeoutForSleepScreen(bool sleepScreenChanged, bool quickResumeTimeoutChanged) {
