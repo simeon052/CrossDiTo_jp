@@ -3117,16 +3117,31 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
 // `y` is the top of the run because it grows downward, unlike drawTextRotated90CW
 // where `y` is the bottom because that one runs upward.
 void GfxRenderer::drawTextSideways(const int fontId, const int x, const int y, const char* text, const bool black,
-                                   const EpdFontFamily::Style style) const {
-  drawRotatedRun(fontId, x, y, text, black, style, /*sideways=*/true);
+                                   const EpdFontFamily::Style style, const int cellWidth) const {
+  drawRotatedRun(fontId, x, y, text, black, style, /*sideways=*/true, cellWidth);
 }
 
-// The two directions are mirror images: Rotated90CW walks the run toward smaller y
-// with glyph tops to the left, Sideways toward larger y with glyph tops to the
-// right. Kerning, ligatures, combining marks and synthetic fallbacks are shared so
-// the two cannot drift apart.
-void GfxRenderer::drawRotatedRun(const int fontId, const int x, const int y, const char* text, const bool black,
-                                 const EpdFontFamily::Style style, const bool sideways) const {
+// 寝かせた区間を、幅 cellWidth の文字セルの中心へ寄せる量。
+//
+// 区間ごとに墨の乗る範囲を測って中心を取ると、含まれる字によってずらす量が
+// 変わる。14pt の実測では数字だけの区間が +1、下に伸びる g を含む区間が +6 に
+// なり、同じ行の中で語ごとに上下してしまった（実機で見えたずれがこれ）。
+//
+// なので中身は見ず、フォントの寸法だけで決める。字の外枠（ascender から
+// descender まで）の中心をセルの中心へ合わせる古典的な規則で、どの語でも
+// 同じ量になる。g が低く落ちるのは横組みでも同じで、正しい。
+int GfxRenderer::sidewaysCentringShift(const EpdFontData* fontData, const int cellWidth) {
+  if (cellWidth <= 0 || !fontData) return 0;
+  // Sideways では screenX = cursorX + advanceY - 1 - ascender + top - glyphY。
+  // ベースラインは cursorX + advanceY - 1 - ascender に来る。
+  const int baselineOffset = fontData->advanceY - 1 - fontData->ascender;
+  // descender は負の値で入っている。
+  const int emBoxCentre = baselineOffset + (fontData->ascender + fontData->descender) / 2;
+  return (cellWidth - 1) / 2 - emBoxCentre;
+}
+
+void GfxRenderer::drawRotatedRun(const int fontId, const int xArg, const int y, const char* text, const bool black,
+                                 const EpdFontFamily::Style style, const bool sideways, const int cellWidth) const {
   // Cannot draw a NULL / empty string
   if (text == nullptr || *text == '\0') {
     return;
@@ -3144,6 +3159,7 @@ void GfxRenderer::drawRotatedRun(const int fontId, const int x, const int y, con
   const EpdFontData* fontData = font.getData(style);
   const int lineHeight = fontData ? fontData->advanceY : 0;
   const int advanceSign = sideways ? 1 : -1;
+  const int x = sideways ? xArg + sidewaysCentringShift(fontData, cellWidth) : xArg;
 
   int lastBaseY = y;
   int lastBaseLeft = 0;
@@ -3535,16 +3551,15 @@ void GfxRenderer::drawTextVertical(const int fontId, const int x, const int y, c
       // 逆になる。実機で最初に見つかった不具合がこれ。
       // 幅の測定は横組みとして行う（縦組みモードのままだと getTextAdvanceX が
       // この関数へ転送されて無限再帰になる）。
-      // 寝かせた語は advanceY 幅の帯に収まる。全角セルより帯のほうが広いので、
-      // 帯の左端を x に合わせると全角文字より右へ寄る。中心どうしを合わせる。
-      const int sidewaysX = x + (fullWidthCell - fontData->advanceY) / 2;
+      // 寝かせた語は、セル幅に対して**インクが**中心に来るよう寄せる。字の外枠で
+      // 揃えると、外枠いっぱいに広がらない数字や大文字が片側に寄って見える。
       forEachSidewaysChunk(sidewaysStart, charStart, [&](const char* chunk) {
         int chunkWidth = 0;
         {
           const VerticalTextScope horizontal(*this, false);
           chunkWidth = getTextAdvanceX(resolvedFontId, chunk, style);
         }
-        drawTextSideways(resolvedFontId, sidewaysX, yPos, chunk, black, style);
+        drawTextSideways(resolvedFontId, x, yPos, chunk, black, style, fullWidthCell);
         yPos += chunkWidth;
       });
       sidewaysStart = nullptr;

@@ -24,10 +24,22 @@ class SdCardFontSystem {
   /// is explicitly requested.
   void begin(GfxRenderer& renderer);
 
+  /// 最小構成のネットワーク起動用。本文フォントは読まず、UIのCJKフォール
+  /// バックに要る小さい寸法だけを載せる。ネットワーク起動はTLSのためヒープを
+  /// 空ける目的でSDフォントを丸ごと飛ばしており、その結果 Wi-Fi・OTA・フォント
+  /// 管理・KOReader・OPDS の画面で日本語が全部豆腐になっていた。
+  void beginUiOnly(GfxRenderer& renderer);
+
   /// Ensure the correct SD font family is loaded for the current settings.
   /// Call before entering the reader or after settings change.
   /// Also re-discovers if the registry has been marked dirty (e.g. by web upload).
   void ensureLoaded(GfxRenderer& renderer);
+
+  /// 本文フォントを落としつつ、UIのCJKフォールバックだけは残す。
+  /// 無線の作業に向けてヒープを空けたいが、画面の日本語は読めたままにしたい
+  /// ときに使う。常駐するのは 8/10/12pt の区間表とカーニング表だけなので、
+  /// 本文フォントを持ち続けるのに比べれば桁違いに小さい。
+  void releaseReaderFontKeepingUiFallbacks(GfxRenderer& renderer);
 
   /// Temporarily unload the active SD font without clearing the saved setting.
   /// Call ensureLoaded() later to restore it before reader rendering.
@@ -97,6 +109,9 @@ class SdCardFontSystem {
   SdCardFontManager manager_;
   std::atomic<bool> registryDirty_{false};
   bool registryLoaded_ = false;
+  // beginUiOnly() で立つ。この起動では本文フォントを読んでいないので、
+  // resolveFontId() が UI 用の小さい寸法を「本文フォント」として返さないようにする。
+  bool uiOnly_ = false;
   uint8_t loadedFontPointSize_ = 0;
 };
 

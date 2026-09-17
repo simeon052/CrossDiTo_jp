@@ -1,0 +1,84 @@
+# 実機で見えた縦組みの崩れを、画素で確かめるための撮影。
+#
+# 写真からの目測では数ピクセルのずれを詰められない。同じ本・同じ設定を
+# シミュレータに読ませて PNG を持ち帰り、インクの位置を数値で比べる。
+#
+# 手で起動する（workflow_dispatch）。CI の必須チェックには入れない。
+name: Verify Screenshots
+
+on:
+  workflow_dispatch:
+    inputs:
+      book:
+        description: "撮影する EPUB のパス"
+        required: false
+        default: "test/epubs/verify_japanese_vertical.epub"
+        type: string
+      settings:
+        description: "設定の上書き（例: readerFontPointSize=16 lineHeightPercent=120）"
+        required: false
+        default: ""
+        type: string
+      page_turns:
+        description: "ページ送りの回数"
+        required: false
+        default: "12"
+        type: string
+
+jobs:
+  screenshots:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+
+      - name: Install SDL2 and OpenSSL
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsdl2-dev libssl-dev
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Cache PlatformIO packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: ${{ runner.os }}-platformio-simulator-${{ hashFiles('platformio.ini') }}
+          restore-keys: |
+            ${{ runner.os }}-platformio-simulator-
+            ${{ runner.os }}-platformio-
+
+      - name: Install PlatformIO Core
+        run: uv pip install --system -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+
+      - name: Install Pillow
+        run: uv pip install --system pillow
+
+      - name: Generate verification EPUB
+        run: python scripts/generate_japanese_verification_epub.py
+
+      - name: Screenshots
+        run: |
+          ARGS=""
+          for kv in ${{ inputs.settings }}; do
+            ARGS="$ARGS --setting $kv"
+          done
+          python scripts/run_simulator_screenshots.py \
+            --book "${{ inputs.book }}" \
+            --page-turns "${{ inputs.page_turns }}" \
+            --out verify-shots $ARGS
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: verify-screenshots
+          path: verify-shots/*.png
+          if-no-files-found: warn

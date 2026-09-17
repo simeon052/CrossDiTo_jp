@@ -58,8 +58,11 @@ class GfxRenderer {
 
  private:
   // Shared body of drawTextRotated90CW / drawTextSideways: same run, opposite turn.
-  void drawRotatedRun(int fontId, int x, int y, const char* text, bool black, EpdFontFamily::Style style,
-                      bool sideways) const;
+  void drawRotatedRun(int fontId, int x, int y, const char* text, bool black, EpdFontFamily::Style style, bool sideways,
+                      int cellWidth = 0) const;
+  // 寝かせた区間を cellWidth の中心へ寄せる量。フォントの寸法だけで決まるので、
+  // 区間の中身によらず一定になる。
+  static int sidewaysCentringShift(const EpdFontData* fontData, int cellWidth);
 
   static constexpr size_t BW_BUFFER_CHUNK_SIZE = 8000;  // 8KB chunks to allow for non-contiguous memory
   static constexpr size_t MAX_BW_BUFFER_CHUNKS =
@@ -356,8 +359,10 @@ class GfxRenderer {
 
   // Latin runs inside Japanese vertical text: turned clockwise, reading top to
   // bottom (CSS text-orientation: sideways). `y` is the TOP of the run.
+  //
+  // cellWidth が正なら、その幅の文字セルの中心へ寄せる。0 なら寄せない。
   void drawTextSideways(int fontId, int x, int y, const char* text, bool black = true,
-                        EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
+                        EpdFontFamily::Style style = EpdFontFamily::REGULAR, int cellWidth = 0) const;
   int getTextHeight(int fontId) const;
 
   // --- 縦書き（tategaki） ---------------------------------------------------

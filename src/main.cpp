@@ -797,7 +797,17 @@ bool setupDisplayAndFonts(const bool seamless, const bool loadReaderResources, c
   // screen builders share the task stack. KOReader Sync and OPDS need the
   // reader stack on S3 because a deferred Wi-Fi child can complete while its
   // parent screen still renders. Other lightweight network targets keep 8 KB.
-  if (!activityManager.begin(useReaderRenderStack ? READER_RENDER_TASK_STACK_BYTES : NETWORK_RENDER_TASK_STACK_BYTES)) {
+  //
+  // ただし SDフォントの CJK フォールバックを載せる起動は別。日本語を描くたびに
+  // 字形をSDから読み込む深い呼び出しが走り、8KB では足りずにスタック末尾の
+  // ウォッチポイントが発火する（実機で ActivityManager が落ちた）。本文を読む
+  // ときと同じ経路を通るので、同じ大きさを与える。
+  const bool willLoadCjkFallbacks = !loadReaderResources && SETTINGS.sdFontFamilyName[0] != '\0';
+  const uint32_t renderStackBytes =
+      (useReaderRenderStack || willLoadCjkFallbacks) ? READER_RENDER_TASK_STACK_BYTES : NETWORK_RENDER_TASK_STACK_BYTES;
+  LOG_INF("MAIN", "Render task stack: %lu bytes (reader=%d cjkFallback=%d)",
+          static_cast<unsigned long>(renderStackBytes), useReaderRenderStack ? 1 : 0, willLoadCjkFallbacks ? 1 : 0);
+  if (!activityManager.begin(renderStackBytes)) {
     LOG_ERR("MAIN", "Activity renderer initialization failed");
     return false;
   }
@@ -825,6 +835,11 @@ bool setupDisplayAndFonts(const bool seamless, const bool loadReaderResources, c
     sdFontSystem.begin(renderer);
   } else {
     LOG_DBG("MAIN", "Skipping EPUB scratch workspace and SD fonts for minimal network boot");
+    // 本文フォントは飛ばすが、UIのCJKフォールバックだけは載せる。ここを丸ごと
+    // 飛ばしていたので、Wi-Fi・OTA・フォント管理の画面が日本語で全部豆腐に
+    // なっていた。載せるのは 8/10/12pt の3つで、字形はページ単位の遅延読みなので
+    // TLS のために空けたヒープをほとんど食わない。
+    sdFontSystem.beginUiOnly(renderer);
   }
   return true;
 }

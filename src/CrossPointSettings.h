@@ -418,7 +418,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t legacySdFontSizeStep = UINT8_MAX;
   uint8_t sdFontSizeRange = SD_FONT_RANGE_TINY;
   uint8_t lineSpacing = NORMAL;  // migration only; new saves use lineHeightPercent
-  uint8_t lineHeightPercent = 100;
+  uint8_t lineHeightPercent = DEFAULT_LINE_HEIGHT_PERCENT;
   uint8_t wordSpacing = 0;
   // 組み方向。利用者が選んだ値だけで決まる。書籍の writing-mode は見ていない。
   uint8_t writingMode = WM_HORIZONTAL;
@@ -537,6 +537,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   static constexpr uint8_t MAX_SLEEP_TIMEOUT_MINUTES = SLEEP_TIMEOUT_NEVER_MINUTES;
   static constexpr uint8_t SD_FONT_MAX_SIZE_STEPS = 8;
   static constexpr uint8_t MIN_READER_FONT_POINT_SIZE = 8;
+  static constexpr uint8_t DEFAULT_LINE_HEIGHT_PERCENT = 100;
+  // 縦組みで勧める行間。横組みは行の高さに ascender / descender ぶんの余白が
+  // 含まれるが、縦組みでは行の高さが列の幅になり、漢字と仮名は字面が em いっぱい
+  // に広がるので余白が残らない。同じ 100% でも列が接して見える。
+  static constexpr uint8_t VERTICAL_LINE_HEIGHT_PERCENT = 120;
   static constexpr uint8_t MIN_LINE_HEIGHT_PERCENT = 70;
   static constexpr uint8_t MAX_LINE_HEIGHT_PERCENT = 200;
   static constexpr uint8_t LINE_HEIGHT_PERCENT_STEP = 1;
