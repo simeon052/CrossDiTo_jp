@@ -10,6 +10,7 @@
 #include <freertos/task.h>
 
 #include <algorithm>
+#include <climits>
 
 #include "FontCacheManager.h"
 #include "VerticalTextUtils.h"
@@ -3117,16 +3118,48 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
 // `y` is the top of the run because it grows downward, unlike drawTextRotated90CW
 // where `y` is the bottom because that one runs upward.
 void GfxRenderer::drawTextSideways(const int fontId, const int x, const int y, const char* text, const bool black,
-                                   const EpdFontFamily::Style style) const {
-  drawRotatedRun(fontId, x, y, text, black, style, /*sideways=*/true);
+                                   const EpdFontFamily::Style style, const int cellWidth) const {
+  drawRotatedRun(fontId, x, y, text, black, style, /*sideways=*/true, cellWidth);
+}
+
+// 寝かせた区間の「実際に黒くなる範囲」を測り、それが幅 cellWidth のセルの中心に
+// 来るようにずらす量を返す。
+//
+// 字の外枠（ascender から descender まで）を合わせるだけでは足りない。数字や
+// 大文字はインクが外枠いっぱいには広がらないので、外枠を中心に置いてもインクは
+// 片側に寄る。実機で「寝かせた半角が中心からずれている」と見えるのがこれ。
+int GfxRenderer::sidewaysInkCentringShift(const EpdFontFamily& font, const EpdFontData* fontData, const char* text,
+                                          const EpdFontFamily::Style style, const int cellWidth) const {
+  if (cellWidth <= 0 || !fontData) return 0;
+
+  int maxTop = INT_MIN;
+  int minBottom = INT_MAX;
+  const char* p = text;
+  uint32_t cp;
+  while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&p)))) {
+    const EpdGlyph* glyph = font.getGlyph(cp, style);
+    if (!glyph || glyph->height == 0) continue;  // 空白は墨が無いので中心の判定に入れない
+    const int top = glyph->top;
+    if (top > maxTop) maxTop = top;
+    const int bottom = top - glyph->height + 1;
+    if (bottom < minBottom) minBottom = bottom;
+  }
+  if (maxTop == INT_MIN) return 0;  // 墨のある字が1つも無い
+
+  // Sideways では screenX = cursorX + advanceY - 1 - ascender + top - glyphY。
+  // ベースラインは cursorX + advanceY - 1 - ascender に来るので、インクは
+  // そこから minBottom..maxTop の範囲に乗る。
+  const int baselineOffset = fontData->advanceY - 1 - fontData->ascender;
+  const int inkCentre = baselineOffset + (maxTop + minBottom) / 2;
+  return (cellWidth - 1) / 2 - inkCentre;
 }
 
 // The two directions are mirror images: Rotated90CW walks the run toward smaller y
 // with glyph tops to the left, Sideways toward larger y with glyph tops to the
 // right. Kerning, ligatures, combining marks and synthetic fallbacks are shared so
 // the two cannot drift apart.
-void GfxRenderer::drawRotatedRun(const int fontId, const int x, const int y, const char* text, const bool black,
-                                 const EpdFontFamily::Style style, const bool sideways) const {
+void GfxRenderer::drawRotatedRun(const int fontId, const int xArg, const int y, const char* text, const bool black,
+                                 const EpdFontFamily::Style style, const bool sideways, const int cellWidth) const {
   // Cannot draw a NULL / empty string
   if (text == nullptr || *text == '\0') {
     return;
@@ -3144,6 +3177,7 @@ void GfxRenderer::drawRotatedRun(const int fontId, const int x, const int y, con
   const EpdFontData* fontData = font.getData(style);
   const int lineHeight = fontData ? fontData->advanceY : 0;
   const int advanceSign = sideways ? 1 : -1;
+  const int x = sideways ? xArg + sidewaysInkCentringShift(font, fontData, text, style, cellWidth) : xArg;
 
   int lastBaseY = y;
   int lastBaseLeft = 0;
@@ -3535,16 +3569,15 @@ void GfxRenderer::drawTextVertical(const int fontId, const int x, const int y, c
       // 逆になる。実機で最初に見つかった不具合がこれ。
       // 幅の測定は横組みとして行う（縦組みモードのままだと getTextAdvanceX が
       // この関数へ転送されて無限再帰になる）。
-      // 寝かせた語は advanceY 幅の帯に収まる。全角セルより帯のほうが広いので、
-      // 帯の左端を x に合わせると全角文字より右へ寄る。中心どうしを合わせる。
-      const int sidewaysX = x + (fullWidthCell - fontData->advanceY) / 2;
+      // 寝かせた語は、セル幅に対して**インクが**中心に来るよう寄せる。字の外枠で
+      // 揃えると、外枠いっぱいに広がらない数字や大文字が片側に寄って見える。
       forEachSidewaysChunk(sidewaysStart, charStart, [&](const char* chunk) {
         int chunkWidth = 0;
         {
           const VerticalTextScope horizontal(*this, false);
           chunkWidth = getTextAdvanceX(resolvedFontId, chunk, style);
         }
-        drawTextSideways(resolvedFontId, sidewaysX, yPos, chunk, black, style);
+        drawTextSideways(resolvedFontId, x, yPos, chunk, black, style, fullWidthCell);
         yPos += chunkWidth;
       });
       sidewaysStart = nullptr;
