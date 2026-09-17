@@ -118,6 +118,60 @@ v4 を書き出し、vert 字形を持たない。使うと縦組みの見た目
 - 端末への転送（SDカードへのコピーは利用者が手でやる）
 - `.cpfont` 形式の再実装
 
+## 実地で確認済みの手順と落とし穴
+
+この仕様は机上のものではなく、BIZ UDGothic の TTF で実際に通してある。
+
+### 通した手順
+
+1. `INTERVAL_PRESETS` に記号用プリセットを足す（`--intervals` はプリセット名しか
+   受け付けないため、生の範囲は渡せない）
+
+```python
+"jp-symbols":  [(0x2100, 0x214F), (0x2190, 0x21FF), (0x2200, 0x22FF),
+                (0x2460, 0x24FF), (0x2500, 0x257F), (0x25A0, 0x25FF),
+                (0x2600, 0x26FF)],
+```
+
+2. コードポイントファイルを `japanese_jis0213` ∪ 記号（**元フォントが実際に
+   持つものだけ**）で作る
+3. 焼く
+
+```
+python fontconvert_sdcard.py --regular BIZUDGothic-Regular.ttf --bold BIZUDGothic-Bold.ttf --name BIZUDGothic-Ext --sizes 8,10,12,14,16,18 --intervals ascii,latin1,punctuation,cjk,jp-symbols --codepoints-file codepoints_jp_ext.txt --output-dir out/BIZUDGothic-Ext
+```
+
+### 結果
+
+| | 字形数 | 区間数 | 14pt のサイズ |
+|---|---|---|---|
+| 配信版と同じ設定 | 19,522 | 201 | 2,285,885 B |
+| 記号を足した版 | 19,903 | 237 | 2,334,331 B |
+
+全6サイズ（レギュラー＋ボールド）で 25.15 MB。すべて v5、vert 字形 34 個。
+
+### 落とし穴
+
+**コードポイントファイルの文字コード。** `fontconvert_sdcard.py` は `open()` に
+エンコーディングを渡していないため、日本語 Windows では cp932 として読もうとして
+落ちる。
+
+```
+UnicodeDecodeError: 'cp932' codec can't decode byte 0x83
+```
+
+配布されている `japanese_jis0213.txt` は冒頭に日本語のコメントがあるので、
+**そのままでは Windows で使えない**（CI は Linux なので通る）。ツールが生成する
+コードポイントファイルは**コメントも含めて ASCII だけにする**か、変換器の呼び出し前に
+`encoding='utf-8'` を渡すよう修正すること。
+
+**元フォントに無い字は空白になる。** BIZ UDGothic の実測では、配信版の収録リスト
+13,474 字のうち **3,227 字が元フォントに存在しない**。これらは ◆ ではなく空白として
+出るので、◆ より気づきにくい。報告を必須にしているのはこのため。
+
+**記号は 1,088 字を要求して 294 字しか増えない。** 残りは元フォントに無い。
+これで十分で、それ以上は存在しない。
+
 ## 動作確認
 
 - `--coverage stock` で作ったものが、配信版と同じ字数（13,474）になること
