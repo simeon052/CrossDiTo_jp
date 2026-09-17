@@ -125,6 +125,20 @@ void PageHorizontalRule::render(GfxRenderer& renderer, const int fontId, const i
     return;
   }
 
+  // 縦組みでは紙面の幅と高さが入れ替わっている。この「横罫」は組版座標では
+  // 行に直交する線なので、画面では縦罫になる。変換を通さないと、列を横切る
+  // 横線がそのまま残る（xOffset/yOffset は PageLine と同じく変換の外側）。
+  if (renderer.isVerticalTextMode()) {
+    int screenX = 0;
+    int screenY = 0;
+    renderer.mapVerticalLayoutPoint(xPos, yPos, screenX, screenY);
+    // mapVerticalLayoutPoint は列1本ぶんの左端を返す。罫の厚みは列の幅では
+    // なく thickness なので、列の右端から厚みぶんだけ戻した位置に置く。
+    const int columnRight = screenX + renderer.verticalPageTransform().columnWidth;
+    renderer.fillRect(columnRight - thickness, screenY, thickness, width, foregroundBlack);
+    return;
+  }
+
   renderer.drawLine(xPos + xOffset, yPos + yOffset, xPos + xOffset + width - 1, yPos + yOffset, thickness,
                     foregroundBlack);
 }
