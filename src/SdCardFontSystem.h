@@ -35,6 +35,12 @@ class SdCardFontSystem {
   /// Also re-discovers if the registry has been marked dirty (e.g. by web upload).
   void ensureLoaded(GfxRenderer& renderer);
 
+  /// 本文フォントを落としつつ、UIのCJKフォールバックだけは残す。
+  /// 無線の作業に向けてヒープを空けたいが、画面の日本語は読めたままにしたい
+  /// ときに使う。常駐するのは 8/10/12pt の区間表とカーニング表だけなので、
+  /// 本文フォントを持ち続けるのに比べれば桁違いに小さい。
+  void releaseReaderFontKeepingUiFallbacks(GfxRenderer& renderer);
+
   /// Temporarily unload the active SD font without clearing the saved setting.
   /// Call ensureLoaded() later to restore it before reader rendering.
   void releaseLoadedFont(GfxRenderer& renderer);

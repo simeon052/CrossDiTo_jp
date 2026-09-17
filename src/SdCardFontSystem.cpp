@@ -275,8 +275,13 @@ void SdCardFontSystem::releaseRegistry() {
   registryLoaded_ = false;
 }
 
+void SdCardFontSystem::releaseReaderFontKeepingUiFallbacks(GfxRenderer& renderer) {
+  releaseLoadedFont(renderer);  // 本文フォントもフォールバックも一度落ちる
+  beginUiOnly(renderer);        // UI に要る寸法だけ載せ直す
+}
+
 void SdCardFontSystem::releaseForNetwork(GfxRenderer& renderer) {
-  releaseLoadedFont(renderer);
+  releaseReaderFontKeepingUiFallbacks(renderer);
 
   releaseRegistry();
   registryDirty_.store(true, std::memory_order_release);

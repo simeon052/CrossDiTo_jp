@@ -205,7 +205,10 @@ void WifiSelectionActivity::onRowEvent(const fui::ActionEvent& event, void* user
 
 void WifiSelectionActivity::onEnter() {
   Activity::onEnter();
-  sdFontSystem.releaseLoadedFont(renderer);
+  // スキャンに向けてヒープを空けるが、UIのCJKフォールバックは残す。落とすと
+  // この画面の日本語が全部豆腐になる（ActivityManager の復旧は onEnter の前に
+  // 走るので、ここで落とすと拾い直す機会が無い）。
+  sdFontSystem.releaseReaderFontKeepingUiFallbacks(renderer);
   ensureWifiEventLoggingRegistered();
 
   // Reset state
