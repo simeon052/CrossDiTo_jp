@@ -58,8 +58,8 @@ class GfxRenderer {
 
  private:
   // Shared body of drawTextRotated90CW / drawTextSideways: same run, opposite turn.
-  void drawRotatedRun(int fontId, int x, int y, const char* text, bool black, EpdFontFamily::Style style,
-                      bool sideways, int cellWidth = 0) const;
+  void drawRotatedRun(int fontId, int x, int y, const char* text, bool black, EpdFontFamily::Style style, bool sideways,
+                      int cellWidth = 0) const;
   // 寝かせた区間のインクが cellWidth の中心に来るよう、開始位置をずらす量。
   int sidewaysInkCentringShift(const EpdFontFamily& font, const EpdFontData* fontData, const char* text,
                                EpdFontFamily::Style style, int cellWidth) const;
