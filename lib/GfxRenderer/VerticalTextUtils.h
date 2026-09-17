@@ -148,11 +148,17 @@ inline constexpr bool isSmallKana(uint32_t cp) {
 inline bool needsRotatedFormInVertical(uint32_t cp) {
   if (cp >= 0x3008 && cp <= 0x3011) return true;  // 〈〉《》「」『』【】
   if (cp >= 0x3014 && cp <= 0x301B) return true;  // 〔〕〖〗〘〙〚〛
+  if (cp == 0x301C || cp == 0x3030) return true;  // 〜〰
+  if (cp == 0x30A0) return true;                  // ゠
   if (cp == 0xFF08 || cp == 0xFF09) return true;  // （）
+  if (cp == 0xFF0D) return true;                  // －
   if (cp == 0xFF1C || cp == 0xFF1E) return true;  // ＜＞
+  if (cp == 0xFF1D) return true;                  // ＝
   if (cp == 0xFF3B || cp == 0xFF3D) return true;  // ［］
+  if (cp == 0xFF3F) return true;                  // ＿
   if (cp == 0xFF5B || cp == 0xFF5D) return true;  // ｛｝
   if (cp == 0xFF5E) return true;                  // ～
+  if (cp == 0xFF5F || cp == 0xFF60) return true;  // ｟｠
   if (cp == 0x30FC) return true;                  // ー
   if (cp == 0x2014 || cp == 0x2015) return true;  // —―
   if (cp == 0x2025 || cp == 0x2026) return true;  // ‥…
