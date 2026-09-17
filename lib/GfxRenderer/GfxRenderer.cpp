@@ -10,7 +10,6 @@
 #include <freertos/task.h>
 
 #include <algorithm>
-#include <climits>
 
 #include "FontCacheManager.h"
 #include "VerticalTextUtils.h"
@@ -3122,42 +3121,25 @@ void GfxRenderer::drawTextSideways(const int fontId, const int x, const int y, c
   drawRotatedRun(fontId, x, y, text, black, style, /*sideways=*/true, cellWidth);
 }
 
-// 寝かせた区間の「実際に黒くなる範囲」を測り、それが幅 cellWidth のセルの中心に
-// 来るようにずらす量を返す。
+// 寝かせた区間を、幅 cellWidth の文字セルの中心へ寄せる量。
 //
-// 字の外枠（ascender から descender まで）を合わせるだけでは足りない。数字や
-// 大文字はインクが外枠いっぱいには広がらないので、外枠を中心に置いてもインクは
-// 片側に寄る。実機で「寝かせた半角が中心からずれている」と見えるのがこれ。
-int GfxRenderer::sidewaysInkCentringShift(const EpdFontFamily& font, const EpdFontData* fontData, const char* text,
-                                          const EpdFontFamily::Style style, const int cellWidth) const {
+// 区間ごとに墨の乗る範囲を測って中心を取ると、含まれる字によってずらす量が
+// 変わる。14pt の実測では数字だけの区間が +1、下に伸びる g を含む区間が +6 に
+// なり、同じ行の中で語ごとに上下してしまった（実機で見えたずれがこれ）。
+//
+// なので中身は見ず、フォントの寸法だけで決める。字の外枠（ascender から
+// descender まで）の中心をセルの中心へ合わせる古典的な規則で、どの語でも
+// 同じ量になる。g が低く落ちるのは横組みでも同じで、正しい。
+int GfxRenderer::sidewaysCentringShift(const EpdFontData* fontData, const int cellWidth) {
   if (cellWidth <= 0 || !fontData) return 0;
-
-  int maxTop = INT_MIN;
-  int minBottom = INT_MAX;
-  const char* p = text;
-  uint32_t cp;
-  while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&p)))) {
-    const EpdGlyph* glyph = font.getGlyph(cp, style);
-    if (!glyph || glyph->height == 0) continue;  // 空白は墨が無いので中心の判定に入れない
-    const int top = glyph->top;
-    if (top > maxTop) maxTop = top;
-    const int bottom = top - glyph->height + 1;
-    if (bottom < minBottom) minBottom = bottom;
-  }
-  if (maxTop == INT_MIN) return 0;  // 墨のある字が1つも無い
-
   // Sideways では screenX = cursorX + advanceY - 1 - ascender + top - glyphY。
-  // ベースラインは cursorX + advanceY - 1 - ascender に来るので、インクは
-  // そこから minBottom..maxTop の範囲に乗る。
+  // ベースラインは cursorX + advanceY - 1 - ascender に来る。
   const int baselineOffset = fontData->advanceY - 1 - fontData->ascender;
-  const int inkCentre = baselineOffset + (maxTop + minBottom) / 2;
-  return (cellWidth - 1) / 2 - inkCentre;
+  // descender は負の値で入っている。
+  const int emBoxCentre = baselineOffset + (fontData->ascender + fontData->descender) / 2;
+  return (cellWidth - 1) / 2 - emBoxCentre;
 }
 
-// The two directions are mirror images: Rotated90CW walks the run toward smaller y
-// with glyph tops to the left, Sideways toward larger y with glyph tops to the
-// right. Kerning, ligatures, combining marks and synthetic fallbacks are shared so
-// the two cannot drift apart.
 void GfxRenderer::drawRotatedRun(const int fontId, const int xArg, const int y, const char* text, const bool black,
                                  const EpdFontFamily::Style style, const bool sideways, const int cellWidth) const {
   // Cannot draw a NULL / empty string
@@ -3177,7 +3159,7 @@ void GfxRenderer::drawRotatedRun(const int fontId, const int xArg, const int y, 
   const EpdFontData* fontData = font.getData(style);
   const int lineHeight = fontData ? fontData->advanceY : 0;
   const int advanceSign = sideways ? 1 : -1;
-  const int x = sideways ? xArg + sidewaysInkCentringShift(font, fontData, text, style, cellWidth) : xArg;
+  const int x = sideways ? xArg + sidewaysCentringShift(fontData, cellWidth) : xArg;
 
   int lastBaseY = y;
   int lastBaseLeft = 0;
