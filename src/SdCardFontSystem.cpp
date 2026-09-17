@@ -134,6 +134,7 @@ void SdCardFontSystem::beginUiOnly(GfxRenderer& renderer) {
     return;
   }
 
+  uiOnly_ = true;
   ensureRegistry();
   int registered = 0;
   for (const auto& ui : kUiFontSizes) {
@@ -163,6 +164,8 @@ void SdCardFontSystem::beginUiOnly(GfxRenderer& renderer) {
 }
 
 void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
+  // 本文フォントを読むなら、もう UI 専用の起動ではない。
+  uiOnly_ = false;
   // If the web server (or another task) installed/deleted fonts, re-discover.
   // Track whether we just re-discovered so we can force a reload below even
   // when the wanted family/size still maps to the same point size — the file
@@ -376,6 +379,11 @@ void SdCardFontSystem::setupUiFallbacksDirect(GfxRenderer& renderer, const char*
 }
 
 int SdCardFontSystem::resolveFontId(const char* familyName, uint8_t /*pointSize*/) const {
+  // 最小構成のネットワーク起動では本文フォントを読んでいない。載っているのは
+  // UI 用の 8/10/12pt だけなので、その最小のものを「本文フォント」として返すと
+  // 本文用のフォントIDを聞いた側が 8pt を掴む。この起動に本文の描画は無いので、
+  // 素直に「無い」と答える。
+  if (uiOnly_) return 0;
   // The manager loads exactly one size (closest to the selected point size), so the
   // enum is implicit — always return the single loaded font ID for this family.
   // ensureLoaded() must have been called with the current settings before this.

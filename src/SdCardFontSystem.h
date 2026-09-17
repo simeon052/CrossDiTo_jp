@@ -103,6 +103,9 @@ class SdCardFontSystem {
   SdCardFontManager manager_;
   std::atomic<bool> registryDirty_{false};
   bool registryLoaded_ = false;
+  // beginUiOnly() で立つ。この起動では本文フォントを読んでいないので、
+  // resolveFontId() が UI 用の小さい寸法を「本文フォント」として返さないようにする。
+  bool uiOnly_ = false;
   uint8_t loadedFontPointSize_ = 0;
 };
 
