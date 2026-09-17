@@ -59,6 +59,38 @@ There are three ways to install fonts:
 
 3.  Insert the SD card and power on your CrossDiTo device
 
+### 自分で焼いたフォントを使う（日本語向け）
+
+上の Option 3 と同じ置き方で、**自分で生成した `.cpfont` もそのまま使えます。**
+ファームの変更は要りません。ディレクトリ名がそのまま設定画面に出る名前になり、
+ファイル名は `<なんでも>_<サイズ>.cpfont` であれば拾われます。
+
+        SD Card Root/
+        └── fonts/
+            └── BIZUDGothic-Ext/            ← この名前が設定画面に出る
+                ├── BIZUDGothic-Ext_8.cpfont
+                ├── BIZUDGothic-Ext_10.cpfont
+                ├── BIZUDGothic-Ext_12.cpfont
+                └── ...
+
+置いたあとの手順:
+
+1. SDカードを挿して起動する（起動時に走査されます）
+2. 設定 → 本文フォント で名前を選ぶ
+3. **8 / 10 / 12pt も一緒に置いてください。** UIの日本語はこの3つを
+   フォールバックとして使うので、無いと設定画面が豆腐になります
+
+注意点:
+
+- **配信フォントと同じ名前にしないでください。** 名前が衝突すると
+  「フォントを管理」からの再ダウンロードで上書きされたり、削除操作で
+  消えたりします。`BIZUDGothic-Ext` のように別名にするのが安全です
+- 生成には縦組み用の字形（`vert`）を含む変換器が要ります。詳しくは
+  [日本語フォントで出せる文字と、変換側での対応方針](./japanese-font-coverage.md) と
+  [フォント生成CLIの仕様](./prompts/build-jp-font-cli.md) を参照してください
+- 配信フォントで出ない記号（矢印・幾何学図形・星・単位記号）は、自分で焼けば
+  収録できます。自分の端末で使うだけなら再配布にあたりません
+
 ## Dictionary Fonts
 
 EPUB books can use a different installed SD-card family for dictionary definitions.
