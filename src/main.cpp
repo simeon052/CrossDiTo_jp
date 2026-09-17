@@ -803,9 +803,8 @@ bool setupDisplayAndFonts(const bool seamless, const bool loadReaderResources, c
   // ウォッチポイントが発火する（実機で ActivityManager が落ちた）。本文を読む
   // ときと同じ経路を通るので、同じ大きさを与える。
   const bool willLoadCjkFallbacks = !loadReaderResources && SETTINGS.sdFontFamilyName[0] != '\0';
-  const uint32_t renderStackBytes = (useReaderRenderStack || willLoadCjkFallbacks)
-                                        ? READER_RENDER_TASK_STACK_BYTES
-                                        : NETWORK_RENDER_TASK_STACK_BYTES;
+  const uint32_t renderStackBytes =
+      (useReaderRenderStack || willLoadCjkFallbacks) ? READER_RENDER_TASK_STACK_BYTES : NETWORK_RENDER_TASK_STACK_BYTES;
   LOG_INF("MAIN", "Render task stack: %lu bytes (reader=%d cjkFallback=%d)",
           static_cast<unsigned long>(renderStackBytes), useReaderRenderStack ? 1 : 0, willLoadCjkFallbacks ? 1 : 0);
   if (!activityManager.begin(renderStackBytes)) {
