@@ -3579,6 +3579,21 @@ void GfxRenderer::drawTextVertical(const int fontId, const int x, const int y, c
           const VerticalTextScope horizontal(*this, false);
           chunkWidth = getTextAdvanceX(resolvedFontId, chunk, style);
         }
+#ifdef SIMULATOR
+        {
+          static int diagCount = 0;
+          if (diagCount < 60) {
+            diagCount++;
+            const int chunkFontId = resolveTextFontId(resolvedFontId, chunk, style);
+            const auto chunkIt = fontMap.find(chunkFontId);
+            const EpdFontData* chunkData = chunkIt != fontMap.end() ? chunkIt->second.getData(style) : nullptr;
+            LOG_INF("VDIAG", "x=%d y=%d cell=%d line=%d chunkFont=%d adv=%d asc=%d desc=%d shift=%d '%s'", x, yPos,
+                    fullWidthCell, resolvedFontId, chunkFontId, chunkData ? chunkData->advanceY : -1,
+                    chunkData ? chunkData->ascender : -1, chunkData ? chunkData->descender : -1,
+                    sidewaysCentringShift(chunkData, fullWidthCell), chunk);
+          }
+        }
+#endif
         drawTextSideways(resolvedFontId, x, yPos, chunk, black, style, fullWidthCell);
         yPos += chunkWidth;
       });
@@ -3622,6 +3637,16 @@ void GfxRenderer::drawTextVertical(const int fontId, const int x, const int y, c
         dy = advance * VerticalTextUtils::SMALL_KANA_DY_PERCENT / 100;
       }
       renderCharImpl<TextRotation::None>(*this, renderMode, font, cp, x + dx, yPos + ascender - dy, black, style);
+#ifdef SIMULATOR
+      {
+        static int diagUpright = 0;
+        if (diagUpright < 60) {
+          diagUpright++;
+          LOG_INF("VDIAG", "upright x=%d y=%d cp=U+%04X adv=%d left=%d w=%d dx=%d", x, yPos,
+                  static_cast<unsigned>(cp), advance, glyph->left, glyph->width, dx);
+        }
+      }
+#endif
     }
 
     yPos += verticalCellAdvance(advance);
