@@ -3525,10 +3525,30 @@ void GfxRenderer::drawTextVertical(const int fontId, const int x, const int y, c
   SdCardFont* sdFont = vertCapableSdFont(resolvedFontId, style);
 
   // 全角1文字ぶんのセル幅。寝かせた欧文を全角文字と同じ軸に載せるのに使う。
-  // 「あ」で測るのは、この経路のフォントが常にCJKを持つため。
-  // 「あ」を持たないフォント（ラテン専用）では 0 が返る。その場合はずらさない。
-  const int probedCell = verticalCharCellSize(resolvedFontId, 0x3042, style);
-  const int fullWidthCell = probedCell > 0 ? probedCell : (fontData ? fontData->advanceY : 0);
+  //
+  // もとは「あ」を測っていた。SDフォントの送り幅はそのページに出てくる字ぶん
+  // しか載らないので、本文に「あ」が無いページでは測れず、置換字形の半角幅が
+  // 返る。セルが 10px ほど狭く見積もられ、寝かせた欧文だけが列の中心から
+  // 5px 左へずれた（実機で「欧文が左に寄る」と見えていたのがこれ。ページに
+  // 「あ」があるかどうかで出たり消えたりするので再現しづらかった）。
+  //
+  // 揃える相手はこの行に立っている全角文字そのものなので、そこから取る。
+  // 立つ字は必ず描かれる＝送り幅が載っていることが保証される。縦組みで立つ字は
+  // どれも全角なので、最初の1つで足りる。
+  int fullWidthCell = 0;
+  for (const char* probe = text; *probe != '\0';) {
+    const uint32_t probeCp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&probe));
+    if (probeCp == 0) break;
+    if (!verticalTakesOwnCell(probeCp, sdFont, style)) continue;
+    fullWidthCell = verticalCharCellSize(resolvedFontId, probeCp, style);
+    break;
+  }
+  if (fullWidthCell <= 0) {
+    // 立つ字が1つも無い行（欧文だけの行）。揃える相手もいないので、
+    // 従来どおり「あ」で測る。ラテン専用フォントでは 0 が返り、ずらさない。
+    const int probedCell = verticalCharCellSize(resolvedFontId, 0x3042, style);
+    fullWidthCell = probedCell > 0 ? probedCell : (fontData ? fontData->advanceY : 0);
+  }
 
   int yPos = y;
   const char* p = text;
