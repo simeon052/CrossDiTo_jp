@@ -638,6 +638,14 @@ void putTiltSensorToSleepForDeepSleep() {
   LOG_ERR("MAIN", "Tilt sensor did not confirm sleep before deep sleep");
 }
 
+// 明かりの切り替えと、その状態の保存。切り替え口が2つあるので共通にする。
+void setFrontlightOn(const bool lightOn, const char* how) {
+  Frontlight.setOn(lightOn);
+  SETTINGS.frontlightOn = lightOn ? 1 : 0;
+  SETTINGS.saveToFile();
+  LOG_INF("LIGHT", "Frontlight toggled %s by %s", lightOn ? "on" : "off", how);
+}
+
 bool handleX4ProFrontlightDoubleClick() {
 #ifdef SIMULATOR
   return false;
@@ -658,13 +666,39 @@ bool handleX4ProFrontlightDoubleClick() {
   }
 
   lastX4ProPowerClickAt = 0;
-  const bool lightOn = !Frontlight.isOn();
-  Frontlight.setOn(lightOn);
-  SETTINGS.frontlightOn = lightOn ? 1 : 0;
-  SETTINGS.saveToFile();
-  LOG_INF("LIGHT", "Frontlight toggled %s by power-button double-click", lightOn ? "on" : "off");
+  setFrontlightOn(!Frontlight.isOn(), "power-button double-click");
   return true;
 #endif
+}
+
+// 両端のページ送りボタンを同時に押して明かりを切り替える。
+//
+// X4 Pro は物理ボタンが3つしかなく、明かりの出し入れは電源ボタンの
+// ダブルクリックか、画面上端からのスワイプしか無かった。前者は寝かせる操作と
+// 隣り合っていて押し間違えやすく、後者は本を持ち替えないと届かない。両端の
+// ボタンは読書中に指が載っているので、そこから届くようにする。
+//
+// スクリーンショットの POWER+DOWN と同じ形にしてある。組み合わせが成立して
+// いる間は loop の残りへ渡さないので、2つ目のボタンの押し下げも離しも
+// アクティビティには届かない。
+bool handleFrontlightSideButtonChord() {
+  if (!Frontlight.present()) return false;
+
+  static bool chordHandled = false;
+  const bool upHeld = gpio.isPressed(HalGPIO::BTN_UP);
+  const bool downHeld = gpio.isPressed(HalGPIO::BTN_DOWN);
+
+  if (!upHeld || !downHeld) {
+    // 片方が残っている間は食い続ける。ここで通すと、離した側の縁が
+    // ページ送りとして走ってしまう。
+    if (chordHandled && !upHeld && !downHeld) chordHandled = false;
+    return chordHandled;
+  }
+
+  if (chordHandled) return true;  // 押しっぱなしで連続して切り替わらないように
+  chordHandled = true;
+  setFrontlightOn(!Frontlight.isOn(), "side-button chord");
+  return true;
 }
 }  // namespace
 
@@ -1278,6 +1312,12 @@ void loop() {
   // X4 Pro-only frontlight shortcut. Consume the second release so a configured
   // short-power action does not also run for the click that toggled the light.
   if (handleX4ProFrontlightDoubleClick()) {
+    return;
+  }
+
+  // 両端のページ送りボタン同時押しでも明かりを切り替える。成立している間は
+  // 以降へ渡さない（2つ目の押し下げと、両方の離しを食う）。
+  if (handleFrontlightSideButtonChord()) {
     return;
   }
 

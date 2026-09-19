@@ -145,11 +145,16 @@ inline constexpr bool isSmallKana(uint32_t cp) {
 //
 // 、。！？ のように「位置がずれるだけ」のものはここに含めない。あれらを寝かせると
 // かえっておかしくなるので、字形が無ければ立てたままにする。
+//
+// 引用符で挙げてあるのは全角の ＂＇ だけ。“” ‘’ や ASCII の "' は
+// isUprightInVertical() のどの範囲にも入らないので、もともと寝かせる側へ落ちる。
+// 全角形は FF00-FFEF の一括判定で立ってしまうため、ここで拾い直す必要がある。
 inline bool needsRotatedFormInVertical(uint32_t cp) {
   if (cp >= 0x3008 && cp <= 0x3011) return true;  // 〈〉《》「」『』【】
   if (cp >= 0x3014 && cp <= 0x301B) return true;  // 〔〕〖〗〘〙〚〛
   if (cp == 0x301C || cp == 0x3030) return true;  // 〜〰
   if (cp == 0x30A0) return true;                  // ゠
+  if (cp == 0xFF02 || cp == 0xFF07) return true;  // ＂＇
   if (cp == 0xFF08 || cp == 0xFF09) return true;  // （）
   if (cp == 0xFF0D) return true;                  // －
   if (cp == 0xFF1C || cp == 0xFF1E) return true;  // ＜＞
