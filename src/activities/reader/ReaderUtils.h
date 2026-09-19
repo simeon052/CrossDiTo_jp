@@ -160,15 +160,19 @@ inline bool isTouchMenuDismissGesture(const MappedInputManager& input) {
 }
 
 inline PageTurnResult detectPageTurn(const MappedInputManager& input) {
-  // Side buttons fire on press only when long-press action is OFF (nothing to detect).
-  const bool sideUsePress = SETTINGS.sideButtonLongPress == CrossPointSettings::SIDE_LONG_PRESS::SIDE_LONG_OFF;
-
+  // 側面ボタンは「離し」で送る。
+  //
+  // もとは長押し動作が無いとき（既定）だけ押し下げで送っていた。押し下げで
+  // 送ると、両端同時押しでフロントライトを切り替える操作
+  // （main.cpp の handleFrontlightSideButtonChord）で、先に触れた側が必ず
+  // 1ページ送ってしまう。人の同時押しには数十 ms のずれがあり、その間に
+  // loop() が回るため。離しに揃えると、組み合わせが成立している間に両方の
+  // 縁を食えるのでページは動かない。長押し動作を設定したときに通る経路と
+  // 同じなので、もともと動いている道でもある。
   const bool tiltNext = SETTINGS.tiltPageTurn && halTiltSensor.wasTiltedForward();
   const bool tiltPrev = SETTINGS.tiltPageTurn && halTiltSensor.wasTiltedBack();
-  const bool sidePrev = sideUsePress ? input.wasPressed(MappedInputManager::Button::PageBack)
-                                     : input.wasReleased(MappedInputManager::Button::PageBack);
-  const bool sideNext = sideUsePress ? input.wasPressed(MappedInputManager::Button::PageForward)
-                                     : input.wasReleased(MappedInputManager::Button::PageForward);
+  const bool sidePrev = input.wasReleased(MappedInputManager::Button::PageBack);
+  const bool sideNext = input.wasReleased(MappedInputManager::Button::PageForward);
 
   const bool frontPrev = input.wasReleased(MappedInputManager::Button::Left);
   const bool powerReleased = input.wasReleased(MappedInputManager::Button::Power);

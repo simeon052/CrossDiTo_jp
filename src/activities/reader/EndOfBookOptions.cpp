@@ -61,10 +61,7 @@ EndOfBookOptions::Action EndOfBookOptions::handleMenuInput(const MappedInputMana
 
   // Selection movement follows reader page-turn buttons: side buttons honor the
   // configured side-button layout, while front Left/Right move on release.
-  const bool sideUsePress = SETTINGS.sideButtonLongPress == CrossPointSettings::SIDE_LONG_PRESS::SIDE_LONG_OFF;
-  const auto sideTriggered = [&](const MappedInputManager::Button button) {
-    return sideUsePress ? input.wasPressed(button) : input.wasReleased(button);
-  };
+  const auto sideTriggered = [&](const MappedInputManager::Button button) { return input.wasReleased(button); };
   const int itemCount = static_cast<int>(names.size()) + 1;  // + "Home" entry
   if (sideTriggered(MappedInputManager::Button::PageBack) || input.wasReleased(MappedInputManager::Button::Left)) {
     selector = ButtonNavigator::previousIndex(selector, itemCount);  // wraps to the bottom

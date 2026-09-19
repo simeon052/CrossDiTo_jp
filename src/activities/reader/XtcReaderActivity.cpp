@@ -235,15 +235,11 @@ void XtcReaderActivity::loop() {
     return;
   }
 
-  // Side buttons fire on press only when long-press action is OFF.
-  const bool sideUsePress = SETTINGS.sideButtonLongPress == CrossPointSettings::SIDE_LONG_PRESS::SIDE_LONG_OFF;
-
+  // 側面ボタンは「離し」で送る。理由は ReaderUtils.h の detectPageTurn に。
   const bool tiltNext = SETTINGS.tiltPageTurn && halTiltSensor.wasTiltedForward();
   const bool tiltPrev = SETTINGS.tiltPageTurn && halTiltSensor.wasTiltedBack();
-  const bool sidePrev = sideUsePress ? mappedInput.wasPressed(MappedInputManager::Button::PageBack)
-                                     : mappedInput.wasReleased(MappedInputManager::Button::PageBack);
-  const bool sideNext = sideUsePress ? mappedInput.wasPressed(MappedInputManager::Button::PageForward)
-                                     : mappedInput.wasReleased(MappedInputManager::Button::PageForward);
+  const bool sidePrev = mappedInput.wasReleased(MappedInputManager::Button::PageBack);
+  const bool sideNext = mappedInput.wasReleased(MappedInputManager::Button::PageForward);
   const bool frontPrev = mappedInput.wasReleased(MappedInputManager::Button::Left);
   const bool powerReleased = mappedInput.wasReleased(MappedInputManager::Button::Power);
   if (powerReleased && longPowerPageTurnHandled) {
