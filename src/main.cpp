@@ -689,10 +689,14 @@ bool handleFrontlightSideButtonChord() {
   const bool downHeld = gpio.isPressed(HalGPIO::BTN_DOWN);
 
   if (!upHeld || !downHeld) {
+    if (!chordHandled) return false;
     // 片方が残っている間は食い続ける。ここで通すと、離した側の縁が
     // ページ送りとして走ってしまう。
-    if (chordHandled && !upHeld && !downHeld) chordHandled = false;
-    return chordHandled;
+    if (upHeld || downHeld) return true;
+    // 両方離れた周回。ここも食ってから解除する。先に解除して通すと、
+    // 2つ目の離しの縁がそのままページ送りになる。
+    chordHandled = false;
+    return true;
   }
 
   if (chordHandled) return true;  // 押しっぱなしで連続して切り替わらないように
