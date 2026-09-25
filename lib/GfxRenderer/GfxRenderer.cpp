@@ -3492,12 +3492,39 @@ int GfxRenderer::getTextAdvanceVertical(const int fontId, const char* text, cons
   return total;
 }
 
+// 全角1文字ぶんの列の幅。
+//
+// 行の中に立つ字があれば、その送りを使う。立つ字は必ず描かれる＝送り幅が
+// 載っていることが保証される。縦組みで立つ字はどれも全角なので最初の1つで
+// 足りる。無ければフォントの行送りを使う。どちらも「その頁に何が載っているか」
+// に依存しない。
+int GfxRenderer::verticalFullWidthCell(const int resolvedFontId, const char* text, SdCardFont* sdFont,
+                                       const EpdFontFamily::Style style) const {
+  if (text != nullptr) {
+    for (const char* probe = text; *probe != '\0';) {
+      const uint32_t cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&probe));
+      if (cp == 0) break;
+      if (!verticalTakesOwnCell(cp, sdFont, style)) continue;
+      const int cell = verticalCharCellSize(resolvedFontId, cp, style);
+      if (cell > 0) return cell;
+      break;
+    }
+  }
+  const auto fontIt = fontMap.find(resolvedFontId);
+  if (fontIt == fontMap.end()) return 0;
+  const EpdFontData* fontData = fontIt->second.getData(style);
+  return fontData ? fontData->advanceY : 0;
+}
+
+// 縦組みの列の幅。ルビを親文字の右へ置く位置と、打ち消し線が通る列の中央を
+// これで決めている。
+//
+// もとは text の先頭1文字の送りを返していた。欧文の語では先頭が 'P' などに
+// なるので全角セルではなく欧文の幅（実測で10px前後）が返り、ルビが親文字に
+// 食い込み、打ち消し線が列の左に寄っていた。列の幅は中身の字種で変わらない。
 int GfxRenderer::getVerticalCellWidth(const int fontId, const char* text, const EpdFontFamily::Style style) const {
   if (text == nullptr || *text == '\0') return 0;
-  const auto* p = reinterpret_cast<const uint8_t*>(text);
-  const uint32_t cp = utf8NextCodepoint(&p);
-  if (cp == 0) return 0;
-  return verticalCharCellSize(resolveTextFontId(fontId, text, style), cp, style);
+  return verticalFullWidthCell(resolveTextFontId(fontId, text, style), text, /*sdFont=*/nullptr, style);
 }
 
 void GfxRenderer::drawTextVertical(const int fontId, const int x, const int y, const char* text, const bool black,
@@ -3534,18 +3561,8 @@ void GfxRenderer::drawTextVertical(const int fontId, const int x, const int y, c
   // ので、実機の写真では詰められなかった。
   //
   // この関数は語単位で呼ばれる（欧文だけの text が普通に来る）ので、行の中に
-  // 全角文字がある保証は無い。あれば送り幅が載っていることが保証されるので
-  // そこから取り、無ければフォントの行送りを使う。どちらも「その頁に何が
-  // 載っているか」に依存しない。
-  int fullWidthCell = 0;
-  for (const char* probe = text; *probe != '\0';) {
-    const uint32_t probeCp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&probe));
-    if (probeCp == 0) break;
-    if (!verticalTakesOwnCell(probeCp, sdFont, style)) continue;
-    fullWidthCell = verticalCharCellSize(resolvedFontId, probeCp, style);
-    break;
-  }
-  if (fullWidthCell <= 0) fullWidthCell = fontData->advanceY;
+  // 全角文字がある保証は無い。verticalFullWidthCell がその両方を見る。
+  const int fullWidthCell = verticalFullWidthCell(resolvedFontId, text, sdFont, style);
 
   int yPos = y;
   const char* p = text;

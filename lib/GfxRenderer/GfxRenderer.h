@@ -147,6 +147,9 @@ class GfxRenderer {
   // 1文字ぶんのセルの大きさ。横組みの測定をそのまま使う（SDフォントの
   // 字形が未ロードでも正しい送りが取れる経路）。
   int verticalCharCellSize(int fontId, uint32_t cp, EpdFontFamily::Style style) const;
+  // 全角1文字ぶんの列の幅。text に立つ字があればその送りを、無ければ
+  // フォントの行送りを返す。ページの内容に依存しない値だけを見る。
+  int verticalFullWidthCell(int resolvedFontId, const char* text, SdCardFont* sdFont, EpdFontFamily::Style style) const;
   // 縦用字形を持つSDフォントなら返す（この場で読み込む）。持たなければ nullptr。
   SdCardFont* vertCapableSdFont(int resolvedFontId, EpdFontFamily::Style style) const;
   // 縦組みで「1文字ぶんのセル」として扱うか。正立する字に加えて、縦用字形を
