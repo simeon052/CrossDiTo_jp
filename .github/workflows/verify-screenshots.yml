@@ -29,6 +29,11 @@ on:
         required: false
         default: "250"
         type: string
+      shot_from_ms:
+        description: "撮影を始める時刻ms（起動直後に過ぎる画面はここを早める）"
+        required: false
+        default: "1500"
+        type: string
 
 jobs:
   screenshots:
@@ -79,6 +84,7 @@ jobs:
             --book "${{ inputs.book }}" \
             --page-turns "${{ inputs.page_turns }}" \
             --shot-interval-ms "${{ inputs.shot_interval_ms }}" \
+            --shot-from-ms "${{ inputs.shot_from_ms }}" \
             --out verify-shots $ARGS
 
       - name: Upload screenshots

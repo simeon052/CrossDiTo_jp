@@ -149,6 +149,12 @@ def main() -> int:
         help="スモークテストが送るページ数。少なくすると前のページに留まる",
     )
     parser.add_argument(
+        "--shot-from-ms",
+        type=int,
+        default=SHOT_FIRST_MS,
+        help="撮影を始める時刻（既定 1500）。起動直後に過ぎる画面はここを早める",
+    )
+    parser.add_argument(
         "--shot-interval-ms",
         type=int,
         default=SHOT_INTERVAL_MS,
@@ -208,7 +214,8 @@ def main() -> int:
     # ように、撮ったあとで PNG へ変換する（Pillow があれば）。
     suffix = "vertical" if vertical else "horizontal"
     interval = max(10, args.shot_interval_ms)
-    schedule = range(SHOT_FIRST_MS, max(SHOT_FIRST_MS, args.shot_until_ms) + 1, interval)
+    first = max(0, args.shot_from_ms)
+    schedule = range(first, max(first, args.shot_until_ms) + 1, interval)
     shots = [(ms, out_dir / f"{suffix}-{i + 1}.bmp") for i, ms in enumerate(schedule)]
     shot_schedule = ";".join(f"{ms}:{path}" for ms, path in shots)
 
