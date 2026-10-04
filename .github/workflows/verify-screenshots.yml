@@ -24,6 +24,11 @@ on:
         required: false
         default: "12"
         type: string
+      shot_interval_ms:
+        description: "撮影の間隔ms（一瞬しか出ない画面を狙うときは詰める）"
+        required: false
+        default: "250"
+        type: string
 
 jobs:
   screenshots:
@@ -73,6 +78,7 @@ jobs:
           python scripts/run_simulator_screenshots.py \
             --book "${{ inputs.book }}" \
             --page-turns "${{ inputs.page_turns }}" \
+            --shot-interval-ms "${{ inputs.shot_interval_ms }}" \
             --out verify-shots $ARGS
 
       - name: Upload screenshots

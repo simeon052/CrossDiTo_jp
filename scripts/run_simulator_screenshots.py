@@ -46,7 +46,9 @@ FONT_BASE_URL = "https://github.com/zrn-ns/crosspoint-jp/releases/download/sd-fo
 # 環境で大きく変わる（手元では 3.3 秒、WSL の /mnt 越しでは 5.7 秒）。時刻を
 # 狙い撃ちにすると外すので、広めに撮って後から使えるコマを選ぶ。ページ送りは
 # リーダー描画のさらに後なので、終端は余裕をもって取る。
-SHOT_SCHEDULE_MS = tuple(range(1500, 10001, 250))
+SHOT_FIRST_MS = 1500
+SHOT_LAST_MS = 10000
+SHOT_INTERVAL_MS = 250
 
 
 def build_simulator(env: str) -> None:
@@ -147,6 +149,18 @@ def main() -> int:
         help="スモークテストが送るページ数。少なくすると前のページに留まる",
     )
     parser.add_argument(
+        "--shot-interval-ms",
+        type=int,
+        default=SHOT_INTERVAL_MS,
+        help="撮影の間隔（既定 250）。一瞬しか出ない画面を狙うときは詰める",
+    )
+    parser.add_argument(
+        "--shot-until-ms",
+        type=int,
+        default=SHOT_LAST_MS,
+        help="撮影を打ち切る時刻（既定 10000）",
+    )
+    parser.add_argument(
         "--setting",
         action="append",
         default=[],
@@ -193,13 +207,15 @@ def main() -> int:
     # シミュレータは SDL_SaveBMP で書く（PNG ではない）。見るときに扱いやすい
     # ように、撮ったあとで PNG へ変換する（Pillow があれば）。
     suffix = "vertical" if vertical else "horizontal"
-    shots = [(ms, out_dir / f"{suffix}-{i + 1}.bmp") for i, ms in enumerate(SHOT_SCHEDULE_MS)]
-    schedule = ";".join(f"{ms}:{path}" for ms, path in shots)
+    interval = max(10, args.shot_interval_ms)
+    schedule = range(SHOT_FIRST_MS, max(SHOT_FIRST_MS, args.shot_until_ms) + 1, interval)
+    shots = [(ms, out_dir / f"{suffix}-{i + 1}.bmp") for i, ms in enumerate(schedule)]
+    shot_schedule = ";".join(f"{ms}:{path}" for ms, path in shots)
 
     # 本を開くのは、ホーム画面をボタンで辿るのではなく、ファームウェア内蔵の
     # スモークテスト経路（src/simulator/SimulatorSmokeTest.cpp）に任せる。
     # 画面構成やテーマに左右されず、確実にリーダーまで進む。
-    last_ms = SHOT_SCHEDULE_MS[-1]
+    last_ms = shots[-1][0]
     input_script = f"{last_ms + 2000}:QUIT"
 
     # SDL_VIDEODRIVER=dummy では SDL_CreateRenderer(SDL_RENDERER_ACCELERATED) が
@@ -208,7 +224,7 @@ def main() -> int:
     # 画面を持たない環境では、代わりに仮想Xサーバ越しに動かす。
     env = os.environ.copy()
     env["CROSSPOINT_SIM_SD"] = str(run_root / "fs_")
-    env["CROSSPOINT_SIM_SCREENSHOTS"] = schedule
+    env["CROSSPOINT_SIM_SCREENSHOTS"] = shot_schedule
     env["CROSSPOINT_SIM_INPUT_SCRIPT"] = input_script
     env["CROSSINK_SIMULATOR_SMOKE_TEST"] = "1"
     env["CROSSINK_SIMULATOR_SMOKE_BOOK"] = book_path
