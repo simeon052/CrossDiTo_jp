@@ -92,6 +92,11 @@ jobs:
           set -euo pipefail
           pio run -e x4-pro | tee pio-x4-pro.log
 
+      # 焼いてみるまで分からない「起動しないイメージ」を、ここで弾く。
+      # 仕組みはスクリプトの先頭に書いてある。
+      - name: Check MMU split
+        run: python scripts/check_image_mmu_split.py .pio/build/x4-pro/CrossDiTo-*.bin
+
       - name: Extract firmware stats
         run: |
           set -euo pipefail

@@ -369,6 +369,25 @@ constexpr uint32_t SILENT_READER_PAGE_BUILD_MAGIC = 0xC1EAB017;
 constexpr uint32_t SILENT_READER_PAGE_BUILD_AUTO_TURN = 1U << 0;
 constexpr uint32_t READER_RENDER_TASK_STACK_BYTES = 16384;
 
+// .flash.text を 64KB 境界の直前から外すための詰め物。
+//
+// ESP32-S3 では flash の rodata(DROM) と PSRAM が同じアドレス領域を使うので、
+// ESP-IDF の sections.ld は rodata の開始位置を「.flash.text のぶんだけ空ける」
+// 形で決める。ところがその領域の原点は 0x3C000020 で 64KB 境界から 0x20 ずれて
+// いるため、**.flash.text が境界の直前 0x20 バイトに着地すると空隙が1ページ
+// 足りなくなる**。IROM と DROM は MMU のページを分け合うので DROM の割り当てが
+// ずれ、起動直後にイメージヘッダを読む system_early_init が
+// 「Invalid app image header」で abort する。リンクもビルドも通るので、焼いて
+// みるまで分からない。v1.5.1.10 と v1.5.1.11 を配布して実機をブートループに
+// 入れたのがこれ（1.5.1.11 は 40 バイト超過だった）。
+//
+// 詰め物で境界を越えておくと、空隙は次の 64KB ページまで取られるので余裕が
+// 一気に広がる。大きさは「境界をまたぐ」ことだけが目的で、値そのものに意味は
+// 無い。scripts/check_image_mmu_split.py がビルドのたびに余裕を測っていて、
+// 足りなくなったらそこで落ちる。落ちたらこの値を増やす。
+constexpr size_t CODE_SIZE_MMU_PAD = 256;
+extern "C" __attribute__((used, section(".text"))) const unsigned char kMmuSplitPad[CODE_SIZE_MMU_PAD] = {};
+
 // How the device is coming back to life, resolved once at boot. Both resume
 // flows suppress the splash and leave the panel holding its pre-boot frame; a
 // plain boot shows the splash. See setup() for the resolution.
