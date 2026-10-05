@@ -385,8 +385,10 @@ constexpr uint32_t READER_RENDER_TASK_STACK_BYTES = 16384;
 // 一気に広がる。大きさは「境界をまたぐ」ことだけが目的で、値そのものに意味は
 // 無い。scripts/check_image_mmu_split.py がビルドのたびに余裕を測っていて、
 // 足りなくなったらそこで落ちる。落ちたらこの値を増やす。
-constexpr size_t CODE_SIZE_MMU_PAD = 256;
-extern "C" __attribute__((used, section(".text"))) const unsigned char kMmuSplitPad[CODE_SIZE_MMU_PAD] = {};
+// const 配列に section(".text") を付ける書き方は効かなかった。データとして
+// 扱われて rodata 側に載り、.flash.text は動かない。関数として積む。
+// 呼ばれることは無く、used だけが意味を持つ。
+extern "C" __attribute__((used, noinline)) void crossditoMmuSplitPad() { asm volatile(".space 256"); }
 
 // How the device is coming back to life, resolved once at boot. Both resume
 // flows suppress the splash and leave the panel holding its pre-boot frame; a
