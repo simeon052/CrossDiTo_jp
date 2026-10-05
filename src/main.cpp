@@ -843,8 +843,8 @@ bool setupDisplayAndFonts(const bool seamless, const bool loadReaderResources) {
   // 起動では本文の資産を読まないぶんヒープは空いていて（OTA 実行時の実測で
   // 156KB 以上）、8KB の差より取りこぼしのほうが高くつく。
   constexpr uint32_t renderStackBytes = READER_RENDER_TASK_STACK_BYTES;
-  LOG_INF("MAIN", "Render task stack: %lu bytes (readerResources=%d)",
-          static_cast<unsigned long>(renderStackBytes), loadReaderResources ? 1 : 0);
+  LOG_INF("MAIN", "Render task stack: %lu bytes (readerResources=%d)", static_cast<unsigned long>(renderStackBytes),
+          loadReaderResources ? 1 : 0);
   if (!activityManager.begin(renderStackBytes)) {
     LOG_ERR("MAIN", "Activity renderer initialization failed");
     return false;
