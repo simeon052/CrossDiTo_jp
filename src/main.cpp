@@ -904,6 +904,12 @@ bool setupDisplayAndFonts(const bool seamless, const bool loadReaderResources) {
 }
 
 void setup() {
+  // 詰め物（crossditoMmuSplitPad）を --gc-sections から守る。used はコンパイラ
+  // 側の削除を止めるだけで、リンカは参照の無いセクションを落とす。volatile な
+  // 書き込みにしてアドレスを必ず触らせる。呼び出しはしない。
+  volatile void (*mmuSplitPadKeep)() = &crossditoMmuSplitPad;
+  (void)mmuSplitPadKeep;
+
 #ifdef SIMULATOR
   SimulatorLifecycle::restoreSilentRebootToken(silentRebootMagic, silentRebootTarget, silentRebootPayload);
 #endif
