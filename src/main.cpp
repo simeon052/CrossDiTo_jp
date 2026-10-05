@@ -66,6 +66,7 @@ inline esp_sleep_wakeup_cause_t esp_sleep_get_wakeup_cause() { return ESP_SLEEP_
 #endif
 
 #include <algorithm>
+#include <cstdint>
 #include <cstring>
 #include <string>
 
@@ -907,7 +908,7 @@ void setup() {
   // 詰め物（crossditoMmuSplitPad）を --gc-sections から守る。used はコンパイラ
   // 側の削除を止めるだけで、リンカは参照の無いセクションを落とす。volatile な
   // 書き込みにしてアドレスを必ず触らせる。呼び出しはしない。
-  volatile void (*mmuSplitPadKeep)() = &crossditoMmuSplitPad;
+  volatile uintptr_t mmuSplitPadKeep = reinterpret_cast<uintptr_t>(&crossditoMmuSplitPad);
   (void)mmuSplitPadKeep;
 
 #ifdef SIMULATOR
