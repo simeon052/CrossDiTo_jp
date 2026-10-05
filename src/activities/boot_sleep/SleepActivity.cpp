@@ -45,7 +45,9 @@ constexpr int sleepBuildInfoSideMargin = 20;
 // clearance はロゴとビルド情報に食い込ませないための下限。
 constexpr int sleepCheatSheetLineGap = 6;
 constexpr int sleepCheatSheetBottomMargin = 28;
-constexpr int sleepCheatSheetClearance = 150;
+// 「スリープ中」の行から見出しまでの距離。下端から積むと項目の少ない基板で
+// 間延びするので、上から置いて下に余白を残す。
+constexpr int sleepCheatSheetTopGap = 45;
 
 bool sleepCoverFilterInvertsGeneratedScreen() {
   return SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::INVERTED_BLACK_AND_WHITE;
@@ -594,7 +596,7 @@ void SleepActivity::renderCustomSleepScreen() const {
 //
 // 並べる項目は本体の持ち物で決める。フロントライトの無い基板や、タッチの
 // 無い基板に、できない操作を書いても案内にならない。
-void SleepActivity::drawControlsCheatSheet() const {
+void SleepActivity::drawControlsCheatSheet(const int statusY) const {
   // tr() は StrId::<名前> へ展開するマクロなので、値として持ち回すときは
   // I18n から直接引く。
   constexpr size_t maxRows = 7;
@@ -618,14 +620,13 @@ void SleepActivity::drawControlsCheatSheet() const {
 
   const int lineHeight = renderer.getTextHeight(SMALL_FONT_ID) + sleepCheatSheetLineGap;
   const int blockHeight = static_cast<int>(rowCount) * lineHeight;
-  // 下端から積む。見出しのぶんを1行ぶん上に取る。ロゴとビルド情報に食い込む
-  // ほど狭い画面では出さない。
-  const int top = renderer.getScreenHeight() - sleepCheatSheetBottomMargin - blockHeight;
-  if (top - lineHeight < renderer.getScreenHeight() / 2 + sleepCheatSheetClearance) return;
+  const int titleY = statusY + sleepCheatSheetTopGap;
+  const int top = titleY + lineHeight;
+  // 下に収まらない画面では出さない。切れた案内はかえって読みにくい。
+  if (top + blockHeight > renderer.getScreenHeight() - sleepCheatSheetBottomMargin) return;
 
   const I18n& i18n = I18n::getInstance();
-  renderer.drawCenteredText(SMALL_FONT_ID, top - lineHeight, i18n.get(StrId::STR_SLEEP_HELP_TITLE), true,
-                            EpdFontFamily::BOLD);
+  renderer.drawCenteredText(SMALL_FONT_ID, titleY, i18n.get(StrId::STR_SLEEP_HELP_TITLE), true, EpdFontFamily::BOLD);
   for (size_t i = 0; i < rowCount; ++i) {
     renderer.drawCenteredText(SMALL_FONT_ID, top + static_cast<int>(i) * lineHeight, i18n.get(rows[i]));
   }
@@ -639,7 +640,7 @@ void SleepActivity::renderDefaultSleepScreen() const {
   renderer.drawImage(Logo120, (pageWidth - 120) / 2, (pageHeight - 120) / 2, 120, 120);
   renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 70, tr(STR_CROSSINK), true, EpdFontFamily::BOLD);
   renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 95, tr(STR_SLEEPING));
-  drawControlsCheatSheet();
+  drawControlsCheatSheet(pageHeight / 2 + 95);
 
   // Make sleep screen dark unless light is selected in settings
   const bool lightSleepScreen = SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::LIGHT;

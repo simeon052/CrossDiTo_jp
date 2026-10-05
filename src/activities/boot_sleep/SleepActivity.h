@@ -19,7 +19,7 @@ class SleepActivity final : public Activity {
   void onEnter() override;
 
  private:
-  void drawControlsCheatSheet() const;
+  void drawControlsCheatSheet(int statusY) const;
   void renderDefaultSleepScreen() const;
   void renderCustomSleepScreen() const;
   void renderCoverSleepScreen() const;
