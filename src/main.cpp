@@ -367,7 +367,6 @@ constexpr uint32_t SILENT_REBOOT_TARGET_HOME = 0;
 constexpr uint32_t SILENT_REBOOT_TARGET_READER = 1;
 constexpr uint32_t SILENT_READER_PAGE_BUILD_MAGIC = 0xC1EAB017;
 constexpr uint32_t SILENT_READER_PAGE_BUILD_AUTO_TURN = 1U << 0;
-constexpr uint32_t NETWORK_RENDER_TASK_STACK_BYTES = 8192;
 constexpr uint32_t READER_RENDER_TASK_STACK_BYTES = 16384;
 
 // How the device is coming back to life, resolved once at boot. Both resume
@@ -804,7 +803,7 @@ void enterDeepSleep(bool fromTimeout) {
   powerManager.startDeepSleep(gpio);
 }
 
-bool setupDisplayAndFonts(const bool seamless, const bool loadReaderResources, const bool useReaderRenderStack) {
+bool setupDisplayAndFonts(const bool seamless, const bool loadReaderResources) {
 #if !defined(SIMULATOR) && !FREEINK_MCU_C3
   // C3 X3/X4 detection already runs in HalGPIO::begin() before SPI owns the
   // panel pins. S3 boards initialize display SPI inside display.begin(), so an
@@ -831,20 +830,21 @@ bool setupDisplayAndFonts(const bool seamless, const bool loadReaderResources, c
     LOG_ERR("MAIN", "Renderer initialization failed");
     return false;
   }
-  // FreeInkUI headers need more than 4 KB once the render loop and nested
-  // screen builders share the task stack. KOReader Sync and OPDS need the
-  // reader stack on S3 because a deferred Wi-Fi child can complete while its
-  // parent screen still renders. Other lightweight network targets keep 8 KB.
+  // 描画タスクのスタックは起動経路で縮めない。
   //
-  // ただし SDフォントの CJK フォールバックを載せる起動は別。日本語を描くたびに
-  // 字形をSDから読み込む深い呼び出しが走り、8KB では足りずにスタック末尾の
-  // ウォッチポイントが発火する（実機で ActivityManager が落ちた）。本文を読む
-  // ときと同じ経路を通るので、同じ大きさを与える。
-  const bool willLoadCjkFallbacks = !loadReaderResources && SETTINGS.sdFontFamilyName[0] != '\0';
-  const uint32_t renderStackBytes =
-      (useReaderRenderStack || willLoadCjkFallbacks) ? READER_RENDER_TASK_STACK_BYTES : NETWORK_RENDER_TASK_STACK_BYTES;
-  LOG_INF("MAIN", "Render task stack: %lu bytes (reader=%d cjkFallback=%d)",
-          static_cast<unsigned long>(renderStackBytes), useReaderRenderStack ? 1 : 0, willLoadCjkFallbacks ? 1 : 0);
+  // もとはネットワーク起動だけ 8KB にしていた。日本語を描くと字形をSDから
+  // 読み込む深い呼び出しが走ってそこに収まらないので、「SDフォントが設定されて
+  // いれば 16KB」という条件で凌いでいた。ところが OTA 更新中の実機クラッシュ
+  // （EXCCAUSE 65 = スタック末尾のウォッチポイント）をコアダンプで見ると、
+  // 落ちた ActivityManagerRender のスタックは 8,180 バイトだった。条件が
+  // 成立しないまま 8KB で走る経路が残っていたことになる。
+  //
+  // 描画の深さは設定値で変わらないので、条件そのものを置かない。ネットワーク
+  // 起動では本文の資産を読まないぶんヒープは空いていて（OTA 実行時の実測で
+  // 156KB 以上）、8KB の差より取りこぼしのほうが高くつく。
+  constexpr uint32_t renderStackBytes = READER_RENDER_TASK_STACK_BYTES;
+  LOG_INF("MAIN", "Render task stack: %lu bytes (readerResources=%d)",
+          static_cast<unsigned long>(renderStackBytes), loadReaderResources ? 1 : 0);
   if (!activityManager.begin(renderStackBytes)) {
     LOG_ERR("MAIN", "Activity renderer initialization failed");
     return false;
@@ -919,12 +919,6 @@ void setup() {
   const uint32_t snapshotTarget = (isSilentReboot && isValidSilentTarget) ? silentRebootTarget : 0;
   const uint32_t snapshotPayload = isSilentReboot ? silentRebootPayload : 0;
   const bool isNetworkResume = snapshotTarget >= static_cast<uint32_t>(NetworkBootTarget::OTA);
-  // Keep the larger render stack only for the two S3 network routes that can
-  // briefly render their parent and child activities together. Reader assets
-  // remain unloaded, so this costs stack space without restoring reader heap.
-  const bool useReaderRenderStack = !isNetworkResume ||
-                                    snapshotTarget == static_cast<uint32_t>(NetworkBootTarget::KOREADER_SYNC) ||
-                                    snapshotTarget == static_cast<uint32_t>(NetworkBootTarget::OPDS);
   silentRebootMagic = 0;
   silentRebootTarget = 0;
   silentRebootPayload = 0;
@@ -1003,7 +997,7 @@ void setup() {
   // We need 6 open files concurrently when parsing a new chapter
   if (!Storage.begin()) {
     LOG_ERR("MAIN", "SD card initialization failed");
-    if (!setupDisplayAndFonts(isSilentReboot, !isNetworkResume, useReaderRenderStack)) {
+    if (!setupDisplayAndFonts(isSilentReboot, !isNetworkResume)) {
       fatalStartupFailure = true;
       LOG_ERR("MAIN", "Fatal startup failure while preparing SD-card error screen");
       return;
@@ -1075,7 +1069,7 @@ void setup() {
                                                         : BootResume::Splash;
   bool allowFastInitialReaderRefresh = false;
 
-  if (!setupDisplayAndFonts(resume != BootResume::Splash, resume != BootResume::Network, useReaderRenderStack)) {
+  if (!setupDisplayAndFonts(resume != BootResume::Splash, resume != BootResume::Network)) {
     fatalStartupFailure = true;
     LOG_ERR("MAIN", "Fatal startup failure: display/render path unavailable");
     return;
