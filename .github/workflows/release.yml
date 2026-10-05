@@ -55,6 +55,11 @@ jobs:
           CROSSINK_RELEASE_VERSION: ${{ env.RELEASE_VERSION }}
         run: pio run -e x4-pro
 
+      # 起動しないイメージをリリースしてしまわないための関門。
+      # 仕組みはスクリプトの先頭に書いてある。
+      - name: Check MMU split
+        run: python scripts/check_image_mmu_split.py .pio/build/x4-pro/CrossDiTo-x4-pro-v${{ env.RELEASE_VERSION }}.bin
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
