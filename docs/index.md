@@ -27,3 +27,4 @@ CrossDiTo's release notes and overview list only the modifications made on top o
 - [Data Cache](./data-cache.md)
 - [Web Server Guide](./webserver.md)
 - [Troubleshooting](./troubleshooting.md)
+- [ESP32-S3 でファームが起動しなくなる罠と、原因の追い方](./esp32s3-boot-and-debug-notes.md)

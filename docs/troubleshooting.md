@@ -63,3 +63,28 @@ This document shows common issues and possible solutions while using the device 
 2. Select **Yes** to remove the saved password
 3. Reconnect and enter the password again
 4. Choose to save the new password
+
+## Device Will Not Start After Flashing
+
+The screen keeps showing whatever was on it before, and the power button does
+nothing. Attach a serial terminal at 115200 and power-cycle — the bootloader
+prints even on release builds where the app's serial log is off.
+
+```sh
+python -m serial.tools.miniterm /dev/ttyACM0 115200
+```
+
+Repeating output means a reset loop, not a dead device; the ROM bootloader is
+still alive and USB flashing still works.
+
+- `E (...) cpu_start: Invalid app image header` — the binary is intact but
+  cannot boot. See [Build-time image check](./installation.md#build-time-image-check)
+  and [ESP32-S3 でファームが起動しなくなる罠と、原因の追い方](./esp32s3-boot-and-debug-notes.md)
+- `ota_1 is not bootable`, or the same lines over and over — the slot/`otadata`
+  state, not the firmware contents
+- Nothing at all — flash or hardware
+
+Recovery is over USB only; the power + down-button SD update screen lives inside
+the app and a loop never reaches it. Write the last release that worked to both
+slots, and start the investigation from there — whether the known-good build
+starts tells you whether to look at the firmware or at the device.

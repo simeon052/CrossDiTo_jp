@@ -103,6 +103,13 @@ BIZ UDGothic の実測では 13,474 字の要求のうち **3,227 字が元フ�
 実機（Xteink X4 Pro / UC8279 パネル）で確認済みなのは **1.5.1.4**（日本語版 jp.4）以降。
 jp.1 と jp.2 は UC8279 の個体で起動画面から進まないので使わないこと。
 
+> [!WARNING]
+> **1.5.1.10 と 1.5.1.11 は起動しない。** プレリリース扱いにして取り下げてある。
+> ファームの中身ではなく `.flash.text` の大きさが 64KB 境界の直前に着地したのが原因で、
+> ビルドもリンクも通るため焼くまで分からなかった。**1.5.1.12 以降を使うこと。**
+> 焼いてしまってブートループに入った場合の戻し方は
+> [Installation](./docs/installation.md#if-the-device-boot-loops-after-flashing) に。
+
 版の表記は 1.5.1.4 から `1.5.1-jp.N` ではなく `1.5.1.N` にした。端末の OTA の版比較器が
 `-` 以降を読み飛ばすので、`-jp.N` のままでは jp 版どうしの新旧を区別できなかった。
 
@@ -286,6 +293,19 @@ pio run -e x4-pro --target upload
 ```
 
 `x4-pro` is the only production firmware environment. Running `pio run` without `-e` builds the same target.
+
+Check the image before flashing it. On the ESP32-S3 a build can link and succeed
+while producing a binary that cannot boot, when `.flash.text` lands in the last
+0x20 bytes before a 64KB boundary:
+
+```sh
+python scripts/check_image_mmu_split.py .pio/build/x4-pro/CrossDiTo-*.bin
+```
+
+CI and the release workflow run this too, so a broken image cannot reach a
+release. Background and recovery steps are in
+[Installation](./docs/installation.md#build-time-image-check); the general
+write-up is [ESP32-S3 でファームが起動しなくなる罠と、原因の追い方](./docs/esp32s3-boot-and-debug-notes.md).
 
 See [Testing and Debugging](./docs/development/testing-debugging.md) for serial logging, simulator checks, static analysis, and bug-report guidance.
 
