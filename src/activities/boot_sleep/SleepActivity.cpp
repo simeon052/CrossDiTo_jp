@@ -1,5 +1,7 @@
 #include "SleepActivity.h"
 
+#include <BoardConfig.h>
+#include <CrossInkHalFrontlight.h>
 #include <Epub.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
@@ -39,6 +41,13 @@ namespace {
 
 constexpr bool TURN_OFF_SCREEN_AFTER_SLEEP_REFRESH = true;
 constexpr int sleepBuildInfoSideMargin = 20;
+// 操作一覧の体裁。行間はフォント高さへの上乗せ、下余白は画面下端から。
+// clearance はロゴとビルド情報に食い込ませないための下限。
+constexpr int sleepCheatSheetLineGap = 6;
+constexpr int sleepCheatSheetBottomMargin = 28;
+// 「スリープ中」の行から見出しまでの距離。下端から積むと項目の少ない基板で
+// 間延びするので、上から置いて下に余白を残す。
+constexpr int sleepCheatSheetTopGap = 45;
 
 bool sleepCoverFilterInvertsGeneratedScreen() {
   return SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::INVERTED_BLACK_AND_WHITE;
@@ -576,6 +585,53 @@ void SleepActivity::renderCustomSleepScreen() const {
 // firmware's only clean refresh in normal operation is the single-pass 0xD7
 // sequence, used once for the sleep image. It never runs the multi-flash GC
 // waveform (0xF7) that FULL_REFRESH selects (#2471's blinking complaint).
+// ロゴ画面の下に操作の一覧を出す。
+//
+// 本体のボタンは3つしかなく、明かりの出し入れもメニューも「覚えていないと
+// 辿り着けない」操作になっている。スリープ画面は毎日いちばん長く表示されて
+// いる絵なので、そこに置いておけば引きやすい。
+//
+// 出すのはロゴの出る既定の画面（ダーク／ライト）だけ。表紙やカスタム画像の
+// 上に文字を重ねると絵を壊すので、ほかのモードには触らない。
+//
+// 並べる項目は本体の持ち物で決める。フロントライトの無い基板や、タッチの
+// 無い基板に、できない操作を書いても案内にならない。
+void SleepActivity::drawControlsCheatSheet(const int statusY) const {
+  // tr() は StrId::<名前> へ展開するマクロなので、値として持ち回すときは
+  // I18n から直接引く。
+  constexpr size_t maxRows = 7;
+  StrId rows[maxRows];
+  size_t rowCount = 0;
+  const auto add = [&](const StrId id) {
+    if (rowCount < maxRows) rows[rowCount++] = id;
+  };
+
+  // 並べる項目は本体の持ち物で決める。できない操作を書いても案内にならない。
+  const bool edgeGestures = mappedInput.hasTouch() && mappedInput.hasHomeKey();
+  add(StrId::STR_SLEEP_HELP_WAKE);
+  add(StrId::STR_SLEEP_HELP_PAGE);
+  if (Frontlight.present()) {
+    add(StrId::STR_SLEEP_HELP_LIGHT_CHORD);
+    if (BoardConfig::isX4Pro()) add(StrId::STR_SLEEP_HELP_LIGHT_DBL);
+    if (edgeGestures) add(StrId::STR_SLEEP_HELP_LIGHT_PANEL);
+  }
+  if (edgeGestures) add(StrId::STR_SLEEP_HELP_MENU);
+  add(StrId::STR_SLEEP_HELP_SHOT);
+
+  const int lineHeight = renderer.getTextHeight(SMALL_FONT_ID) + sleepCheatSheetLineGap;
+  const int blockHeight = static_cast<int>(rowCount) * lineHeight;
+  const int titleY = statusY + sleepCheatSheetTopGap;
+  const int top = titleY + lineHeight;
+  // 下に収まらない画面では出さない。切れた案内はかえって読みにくい。
+  if (top + blockHeight > renderer.getScreenHeight() - sleepCheatSheetBottomMargin) return;
+
+  const I18n& i18n = I18n::getInstance();
+  renderer.drawCenteredText(SMALL_FONT_ID, titleY, i18n.get(StrId::STR_SLEEP_HELP_TITLE), true, EpdFontFamily::BOLD);
+  for (size_t i = 0; i < rowCount; ++i) {
+    renderer.drawCenteredText(SMALL_FONT_ID, top + static_cast<int>(i) * lineHeight, i18n.get(rows[i]));
+  }
+}
+
 void SleepActivity::renderDefaultSleepScreen() const {
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
@@ -584,6 +640,7 @@ void SleepActivity::renderDefaultSleepScreen() const {
   renderer.drawImage(Logo120, (pageWidth - 120) / 2, (pageHeight - 120) / 2, 120, 120);
   renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 70, tr(STR_CROSSINK), true, EpdFontFamily::BOLD);
   renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 95, tr(STR_SLEEPING));
+  drawControlsCheatSheet(pageHeight / 2 + 95);
 
   // Make sleep screen dark unless light is selected in settings
   const bool lightSleepScreen = SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::LIGHT;
