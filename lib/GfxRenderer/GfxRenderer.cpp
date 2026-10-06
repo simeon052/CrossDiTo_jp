@@ -836,6 +836,58 @@ static void renderCharScaled(const GfxRenderer& renderer, GfxRenderer::RenderMod
   }
 }
 
+// 寝かせた字を半分の大きさで描く。ルビ（SUP）と下付き（SUB）用。
+//
+// 縮小は renderCharScaled と同じ 2x2 間引き、座標は renderCharImpl の
+// TextRotation::Sideways と同じ向き。両方を組み合わせた経路が無かったため、
+// ルビの中の長音符や括弧（回転が要る字）だけが原寸で描かれていた。
+static void renderCharSidewaysScaled(const GfxRenderer& renderer, GfxRenderer::RenderMode renderMode,
+                                     const EpdFontFamily& fontFamily, const uint32_t cp, int cursorX, int cursorY,
+                                     const bool pixelState, const EpdFontFamily::Style style) {
+  (void)renderMode;
+  const EpdGlyph* glyph = fontFamily.getGlyph(cp, style);
+  if (!glyph) return;
+  const EpdFontData* fontData = fontFamily.getData(style);
+  if (!fontData) return;
+  const uint8_t* bitmap = renderer.getGlyphBitmap(fontData, glyph);
+  if (!bitmap) return;
+
+  const int srcW = glyph->width;
+  const int srcH = glyph->height;
+  const int dstW = (srcW + 1) / 2;  // ceil so odd-width glyphs aren't clipped
+  const int dstH = (srcH + 1) / 2;
+  // Sideways と同じ帯の中に、寸法を半分にして置く。
+  //   screenX = outerBase - glyphY, screenY = innerBase + glyphX
+  const int outerBase = cursorX + fontData->advanceY / 2 - 1 - fontData->ascender / 2 + glyph->top / 2;
+  const int innerBase = cursorY + glyph->left / 2;
+
+  for (int dstY = 0; dstY < dstH; dstY++) {
+    const int srcY = dstY * 2;
+    const int screenX = outerBase - dstY;
+    for (int dstX = 0; dstX < dstW; dstX++) {
+      const int srcX = dstX * 2;
+      bool hasInk = false;
+      uint8_t coverage = 0;
+      uint8_t maxRaw = 0;
+      for (int sampleY = 0; sampleY < 2 && srcY + sampleY < srcH; sampleY++) {
+        for (int sampleX = 0; sampleX < 2 && srcX + sampleX < srcW; sampleX++) {
+          const int pos = (srcY + sampleY) * srcW + srcX + sampleX;
+          if (fontData->is2Bit) {
+            const uint8_t raw = (bitmap[pos >> 2] >> ((3 - (pos & 3)) * 2)) & 0x3;
+            coverage = static_cast<uint8_t>(coverage + raw);
+            if (raw > maxRaw) maxRaw = raw;
+          } else if ((bitmap[pos >> 3] >> (7 - (pos & 7))) & 1) {
+            hasInk = true;
+          }
+        }
+      }
+      if (fontData->is2Bit ? (maxRaw >= 2 || coverage >= 2) : hasInk) {
+        renderer.drawPixel(screenX, innerBase + dstX, pixelState);
+      }
+    }
+  }
+}
+
 static void renderCharSmallCaps(const GfxRenderer& renderer, GfxRenderer::RenderMode renderMode,
                                 const EpdFontFamily& fontFamily, const uint32_t cp, int cursorX, int cursorY,
                                 const bool pixelState, const EpdFontFamily::Style style) {
@@ -3130,8 +3182,17 @@ void GfxRenderer::drawTextSideways(const int fontId, const int x, const int y, c
 // なので中身は見ず、フォントの寸法だけで決める。字の外枠（ascender から
 // descender まで）の中心をセルの中心へ合わせる古典的な規則で、どの語でも
 // 同じ量になる。g が低く落ちるのは横組みでも同じで、正しい。
-int GfxRenderer::sidewaysCentringShift(const EpdFontData* fontData, const int cellWidth) {
+int GfxRenderer::sidewaysCentringShift(const EpdFontData* fontData, const int cellWidth, const bool scaled) {
   if (cellWidth <= 0 || !fontData) return 0;
+  // ルビと下付きは半分の大きさで描くので、寸法も半分で見る。
+  if (scaled) {
+    const int halfAdvanceY = fontData->advanceY / 2;
+    const int halfAscender = fontData->ascender / 2;
+    const int halfDescender = fontData->descender / 2;
+    const int scaledBaseline = halfAdvanceY - 1 - halfAscender;
+    const int scaledCentre = scaledBaseline + (halfAscender + halfDescender) / 2;
+    return (cellWidth - 1) / 2 - scaledCentre;
+  }
   // Sideways では screenX = cursorX + advanceY - 1 - ascender + top - glyphY。
   // ベースラインは cursorX + advanceY - 1 - ascender に来る。
   const int baselineOffset = fontData->advanceY - 1 - fontData->ascender;
@@ -3159,7 +3220,10 @@ void GfxRenderer::drawRotatedRun(const int fontId, const int xArg, const int y, 
   const EpdFontData* fontData = font.getData(style);
   const int lineHeight = fontData ? fontData->advanceY : 0;
   const int advanceSign = sideways ? 1 : -1;
-  const int x = sideways ? xArg + sidewaysCentringShift(fontData, cellWidth) : xArg;
+  // ルビ（SUP）と下付き（SUB）は半分の大きさで描く。寝かせる経路にこの縮小が
+  // 無かったため、ルビの中の長音符や括弧だけが原寸で出ていた。
+  const bool supSub = (style & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0;
+  const int x = sideways ? xArg + sidewaysCentringShift(fontData, cellWidth, supSub) : xArg;
 
   int lastBaseY = y;
   int lastBaseLeft = 0;
@@ -3207,8 +3271,9 @@ void GfxRenderer::drawRotatedRun(const int fontId, const int xArg, const int y, 
     // Differential rounding: snap (previous advance + current kern) as one unit,
     // subtracting for the rotated coordinate direction.
     if (prevCp != 0) {
-      const auto kernFP = font.getKerning(prevCp, cp, style);           // 4.4 fixed-point kern
-      lastBaseY += advanceSign * fp4::toPixel(prevAdvanceFP + kernFP);  // snap 12.4 fixed-point to nearest pixel
+      const auto kernFP = font.getKerning(prevCp, cp, style);  // 4.4 fixed-point kern
+      const auto stepFP = prevAdvanceFP + (supSub ? halfAdvanceFP(kernFP) : kernFP);
+      lastBaseY += advanceSign * fp4::toPixel(stepFP);  // snap 12.4 fixed-point to nearest pixel
     }
 
     if (!hasRealGlyph && syntheticGlyph::isSpaceFallback(cp)) {
@@ -3281,9 +3346,11 @@ void GfxRenderer::drawRotatedRun(const int fontId, const int xArg, const int y, 
     lastBaseLeft = glyph->left;
     lastBaseWidth = glyph->width;
     lastBaseTop = glyph->top;
-    prevAdvanceFP = glyph->advanceX;  // 12.4 fixed-point
+    prevAdvanceFP = supSub ? halfAdvanceFP(glyph->advanceX) : glyph->advanceX;  // 12.4 fixed-point
 
-    if (sideways) {
+    if (sideways && supSub) {
+      renderCharSidewaysScaled(*this, renderMode, font, cp, x, lastBaseY, black, style);
+    } else if (sideways) {
       renderCharImpl<TextRotation::Sideways>(*this, renderMode, font, cp, x, lastBaseY, black, style);
     } else {
       renderCharImpl<TextRotation::Rotated90CW>(*this, renderMode, font, cp, x, lastBaseY, black, style);

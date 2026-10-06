@@ -62,7 +62,7 @@ class GfxRenderer {
                       int cellWidth = 0) const;
   // 寝かせた区間を cellWidth の中心へ寄せる量。フォントの寸法だけで決まるので、
   // 区間の中身によらず一定になる。
-  static int sidewaysCentringShift(const EpdFontData* fontData, int cellWidth);
+  static int sidewaysCentringShift(const EpdFontData* fontData, int cellWidth, bool scaled = false);
 
   static constexpr size_t BW_BUFFER_CHUNK_SIZE = 8000;  // 8KB chunks to allow for non-contiguous memory
   static constexpr size_t MAX_BW_BUFFER_CHUNKS =
